@@ -1,2 +1,3 @@
-# homelab
+# Homelab
 
+Hello world !
