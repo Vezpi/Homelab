@@ -1,18 +1,18 @@
 terraform {
   required_providers {
     proxmox = {
-      source  = "bpg/proxmox"
+      source = "bpg/proxmox"
     }
   }
 }
 
 provider "proxmox" {
-  endpoint = var.proxmox_endpoint
+  endpoint  = var.proxmox_endpoint
   api_token = var.proxmox_api_token
-  insecure = false
+  insecure  = false
   ssh {
-    agent    = false
+    agent       = false
     private_key = file("~/.ssh/id_ed25519")
-    username = "root"
-  } 
+    username    = "root"
+  }
 }
