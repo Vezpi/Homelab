@@ -1,30 +1,30 @@
 data "proxmox_virtual_environment_vms" "template" {
   filter {
     name   = "name"
-    values = ["ubuntu-cloud"]
+    values = ["${var.vm_template}"]
   }
 }
 
 resource "proxmox_virtual_environment_file" "cloud_config" {
   content_type = "snippets"
   datastore_id = "local"
-  node_name    = "zenith"
+  node_name    = var.node_name
   source_raw {
-    file_name = "simple_vm.cloud-config.yaml"
+    file_name = "vm.cloud-config.yaml"
     data      = <<-EOF
     #cloud-config
-    hostname: simple-vm
+    hostname: ${var.vm_name}
     package_update: true
     package_upgrade: true
     packages:
       - qemu-guest-agent
     users:
       - default
-      - name: vez
+      - name: ${var.vm_user}
         groups: sudo
         shell: /bin/bash
         ssh-authorized-keys:
-          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID62LmYRu1rDUha3timAIcA39LtcIOny1iAgFLnxoBxm vez@bastion"
+          - "${var.vm_user_sshkey}"
         sudo: ALL=(ALL) NOPASSWD:ALL
     runcmd:
       - systemctl enable qemu-guest-agent 
@@ -33,10 +33,10 @@ resource "proxmox_virtual_environment_file" "cloud_config" {
   }
 }
 
-resource "proxmox_virtual_environment_vm" "simple_vm" {
-  name      = "simple-vm"
-  node_name = "zenith"
-  tags      = ["test"]
+resource "proxmox_virtual_environment_vm" "vm" {
+  name      = var.vm_name
+  node_name = var.node_name
+  tags      = var.vm_tags
   agent {
     enabled = true
   }
@@ -44,23 +44,23 @@ resource "proxmox_virtual_environment_vm" "simple_vm" {
   clone {
     vm_id = data.proxmox_virtual_environment_vms.template.vms[0].vm_id
   }
-  bios    = "ovmf"
-  machine = "q35"
+  bios    = var.vm_bios
+  machine = var.vm_machine
   cpu {
-    cores = 2
+    cores = var.vm_cpu
     type  = "host"
   }
   memory {
-    dedicated = 2048
+    dedicated = var.vm_ram
   }
   disk {
-    datastore_id = "ceph-workload"
+    datastore_id = var.node_datastore
     interface    = "scsi0"
     size         = 4
   }
   initialization {
     user_data_file_id = proxmox_virtual_environment_file.cloud_config.id
-    datastore_id      = "ceph-workload"
+    datastore_id      = var.node_datastore
     interface         = "scsi1"
     ip_config {
       ipv4 {
@@ -70,7 +70,7 @@ resource "proxmox_virtual_environment_vm" "simple_vm" {
   }
   network_device {
     bridge  = "vmbr0"
-    vlan_id = 66
+    vlan_id = var.vm_vlan
   }
   operating_system {
     type = "l26"
@@ -81,7 +81,7 @@ resource "proxmox_virtual_environment_vm" "simple_vm" {
 }
 
 output "vm_ip" {
-  value       = proxmox_virtual_environment_vm.simple_vm.ipv4_addresses[1][0]
+  value       = proxmox_virtual_environment_vm.vm.ipv4_addresses[1][0]
   description = "VM IP"
 }
 
