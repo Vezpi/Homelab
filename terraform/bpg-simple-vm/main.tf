@@ -76,7 +76,7 @@ resource "proxmox_virtual_environment_vm" "simple_vm" {
     }
 
     user_account {
-     keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICxWxrBF6W6N2ZrzoKhTwDTZ49tlYzvki+4naHjo8DhB vez-key"]
+     keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID62LmYRu1rDUha3timAIcA39LtcIOny1iAgFLnxoBxm vez@bastion"]
      username = "vez"
     }
 
