@@ -42,7 +42,7 @@ resource "proxmox_virtual_environment_vm" "vm" {
   }
   stop_on_destroy = true
   clone {
-    vm_id = data.proxmox_virtual_environment_vms.template.vms[0].vm_id
+    vm_id     = data.proxmox_virtual_environment_vms.template.vms[0].vm_id
     node_name = data.proxmox_virtual_environment_vms.template.vms[0].node_name
   }
   bios    = var.vm_bios

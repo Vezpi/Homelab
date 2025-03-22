@@ -22,8 +22,8 @@ variable "node_datastore" {
 
 variable "vm_template" {
   description = "Template of the VM"
-  type = string
-  default = "ubuntu-cloud"
+  type        = string
+  default     = "ubuntu-cloud"
 }
 
 variable "vm_name" {
@@ -33,14 +33,14 @@ variable "vm_name" {
 
 variable "vm_user" {
   description = "Admin user of the VM"
-  type = string
-  default = "vez"
+  type        = string
+  default     = "vez"
 }
 
 variable "vm_user_sshkey" {
   description = "Admin user SSH key of the VM"
-  type = string
-  default = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID62LmYRu1rDUha3timAIcA39LtcIOny1iAgFLnxoBxm vez@bastion"
+  type        = string
+  default     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID62LmYRu1rDUha3timAIcA39LtcIOny1iAgFLnxoBxm vez@bastion"
 }
 
 variable "vm_cpu" {
@@ -75,6 +75,6 @@ variable "vm_vlan" {
 
 variable "vm_tags" {
   description = "Tags for the VM"
-  type = list
-  default = ["test"]
+  type        = list(any)
+  default     = ["test"]
 }
