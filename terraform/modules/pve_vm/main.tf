@@ -10,7 +10,7 @@ resource "proxmox_virtual_environment_file" "cloud_config" {
   datastore_id = "local"
   node_name    = var.node_name
   source_raw {
-    file_name = "vm.cloud-config.yaml"
+    file_name = "${var.vm_name}.cloud-config.yaml"
     data      = <<-EOF
     #cloud-config
     hostname: ${var.vm_name}
