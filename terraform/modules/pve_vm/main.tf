@@ -79,6 +79,11 @@ resource "proxmox_virtual_environment_vm" "vm" {
   vga {
     type = "std"
   }
+  lifecycle {
+    ignore_changes = [
+      initialization
+    ]
+  }
 }
 
 output "vm_ip" {
