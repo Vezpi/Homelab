@@ -1,14 +1,22 @@
 ---
 - name: Deploy a Terraform infrastructure
   hosts: localhost
+  gather_facts: false
   tasks:
-    - name: terraform apply
+
+    - name: Create a VM
       cloud.terraform.terraform:
         project_path: /home/vez/homelab/terraform/projects/terransible
         state: present
       register: tf_return
 
+    - name: Refresh inventory
+      ansible.builtin.meta: refresh_inventory
+
 - name: Ping
   hosts: servers
+  gather_facts: false
   tasks:
-    - ping:
+
+    - name: Ping the host group
+      ansible.builtin.ping:
