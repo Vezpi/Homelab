@@ -4,7 +4,7 @@ terraform {
       source = "bpg/proxmox"
     }
     ansible = {
-      source  = "ansible/ansible"
+      source = "ansible/ansible"
     }
   }
 }
