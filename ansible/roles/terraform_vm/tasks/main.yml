@@ -1,0 +1,8 @@
+---
+- name: Create a VM
+  cloud.terraform.terraform:
+    project_path: "{{ terraform_vm_project_path }}"
+    state: "{{ terraform_vm_state }}"
+
+- name: Refresh inventory
+  ansible.builtin.meta: refresh_inventory

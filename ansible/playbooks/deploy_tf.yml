@@ -1,0 +1,17 @@
+---
+- name: Deploy a Terraform infrastructure
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Create a VM with Terraform
+      ansible.builtin.import_role:
+        name: terraform_vm
+      vars:
+        terraform_vm_project_path: /home/vez/homelab/terraform/projects/terransible
+
+- name: Ping
+  hosts: servers
+  gather_facts: false
+  tasks:
+    - name: Ping the host group
+      ansible.builtin.ping:
