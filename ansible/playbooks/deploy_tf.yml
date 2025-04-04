@@ -7,6 +7,8 @@
         name: terraform_vm
       vars:
         terraform_vm_project_path: /home/vez/homelab/terraform/projects/terransible
+        terraform_vars_multi_node_deployment: false
+        terraform_vars_target_node: zenith
         # terraform_vars_vm_attr:
         #   mast:
         #     ram: 2048
@@ -15,7 +17,7 @@
         #   work:
         #     ram: 1024
         #     cpu: 1
-            # vlan: 66
+        # vlan: 66
 
 - name: Ping
   hosts: servers

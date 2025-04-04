@@ -5,6 +5,8 @@
     state: "{{ terraform_vm_state }}"
     complex_vars: true
     variables: 
+      multi_node_deployment: "{{ terraform_vars_multi_node_deployment | default(omit)}}"
+      target_node: "{{ terraform_vars_target_node | default(omit)}}"
       vm_attr: "{{ terraform_vars_vm_attr | default(omit)}}"
 
 - name: Refresh inventory
