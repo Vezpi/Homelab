@@ -5,7 +5,7 @@
     state: "{{ terraform_vm_state }}"
     complex_vars: true
     variables: 
-      vm_attr: "{{ terraform_vars_vm_attr }}"
+      vm_attr: "{{ terraform_vars_vm_attr | default(omit)}}"
 
 - name: Refresh inventory
   ansible.builtin.meta: refresh_inventory
