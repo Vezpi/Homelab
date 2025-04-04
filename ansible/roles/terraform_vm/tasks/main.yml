@@ -3,6 +3,9 @@
   cloud.terraform.terraform:
     project_path: "{{ terraform_vm_project_path }}"
     state: "{{ terraform_vm_state }}"
+    complex_vars: true
+    variables: 
+      vm_attr: "{{ terraform_vars_vm_attr }}"
 
 - name: Refresh inventory
   ansible.builtin.meta: refresh_inventory
