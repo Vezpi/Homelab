@@ -22,10 +22,13 @@ locals {
           vm_cpu    = config.cpu
           vm_ram    = config.ram
           vm_vlan   = config.vlan
+          vm_role   = role
         }
       ]
     ]) : vm.vm_name => vm
   }
+
+  roles = toset([for vm in local.vm_list : vm.vm_role])
 }
 
 data "proxmox_virtual_environment_nodes" "pve_nodes" {}
@@ -34,14 +37,15 @@ output "vm_ip" {
   value = { for k, v in module.pve_vm : k => v.vm_ip }
 }
 
-resource "ansible_group" "servers" {
-  name = "servers"
+resource "ansible_group" "vm_groups" {
+  for_each = local.roles
+  name     = each.key
 }
-resource "ansible_host" "vm" {
+resource "ansible_host" "vm_hosts" {
   for_each = module.pve_vm
   name     = each.key
   variables = {
     ansible_host = each.value.vm_ip
   }
-  groups = ["servers"]
+  groups = [local.vm_list[each.key].vm_role]
 }
