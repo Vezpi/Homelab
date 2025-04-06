@@ -6,7 +6,7 @@ module "pve_vm" {
   vm_cpu    = each.value.vm_cpu
   vm_ram    = each.value.vm_ram
   vm_vlan   = each.value.vm_vlan
-  vm_tags   = [var.vm_env]
+  vm_tags   = var.vm_tags
 }
 
 locals {
@@ -19,7 +19,7 @@ locals {
       for node in local.selected_nodes : [
         for role, config in var.vm_attr : {
           node_name = node
-          vm_name   = "${node}-${role}"
+          vm_name   = "${role}-${var.vm_env}-${node}"
           vm_cpu    = config.cpu
           vm_ram    = config.ram
           vm_vlan   = config.vlan

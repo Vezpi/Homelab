@@ -9,6 +9,8 @@
       target_node: "{{ terraform_vars_target_node | default(omit)}}"
       vm_attr: "{{ terraform_vars_vm_attr | default(omit)}}"
       vm_env: "{{ terraform_vars_vm_env | default(omit)}}"
+      vm_tags: "{{ terraform_vars_vm_tags | default(omit)}}"
+  retries: 1
 
 - name: Refresh inventory
   ansible.builtin.meta: refresh_inventory

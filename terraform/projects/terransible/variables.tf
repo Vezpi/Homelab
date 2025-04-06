@@ -38,3 +38,9 @@ variable "vm_env" {
   type        = string
   default     = "test"
 }
+
+variable "vm_tags" {
+  description = "Tags for the VM"
+  type        = list(any)
+  default     = ["test"]
+}
