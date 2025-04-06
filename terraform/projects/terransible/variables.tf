@@ -32,3 +32,9 @@ variable "vm_attr" {
     "vm" = { ram = 2048, cpu = 2, vlan = 66 }
   }
 }
+
+variable "vm_env" {
+  description = "VM environment"
+  type        = string
+  default     = "test"
+}

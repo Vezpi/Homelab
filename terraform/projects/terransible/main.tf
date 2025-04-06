@@ -6,6 +6,7 @@ module "pve_vm" {
   vm_cpu    = each.value.vm_cpu
   vm_ram    = each.value.vm_ram
   vm_vlan   = each.value.vm_vlan
+  vm_tags   = [var.vm_env]
 }
 
 locals {
