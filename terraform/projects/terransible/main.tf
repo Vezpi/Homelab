@@ -14,12 +14,23 @@ locals {
 
   selected_nodes = var.multi_node_deployment == false ? [var.target_node] : local.all_nodes
 
+  env_digit_map = {
+    "test" = 1
+    "lab"  = 2
+    "dev"  = 3
+    "val"  = 4
+    "prod" = 5
+  }
+
+  env_digit = lookup(local.env_digit_map, var.vm_env, 0)
+
   vm_list = {
     for vm in flatten([
       for node in local.selected_nodes : [
         for role, config in var.vm_attr : {
           node_name = node
           vm_name   = "${role}-${var.vm_env}-${node}"
+          vm_name   = "kub-${substr(role, 0, 1)}${local.env_digit}${substr(node, 0, 1)}"
           vm_cpu    = config.cpu
           vm_ram    = config.ram
           vm_vlan   = config.vlan

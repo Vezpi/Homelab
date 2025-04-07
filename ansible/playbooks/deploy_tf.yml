@@ -7,9 +7,9 @@
         name: terraform_vm
       vars:
         terraform_vm_project_path: /home/vez/homelab/terraform/projects/terransible
-        terraform_vars_vm_env: int
+        terraform_vars_vm_env: lab
         terraform_vars_vm_tags:
-          - dev
+          - lab
         # terraform_vars_multi_node_deployment: false
         # terraform_vars_target_node: zenith
         terraform_vars_vm_attr:
