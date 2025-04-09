@@ -8,9 +8,9 @@
       vars:
         terraform_vm_state: "{{ state | default(omit) }}"
         terraform_vm_project_path: /home/vez/homelab/terraform/projects/terransible
-        terraform_vars_vm_env: lab
+        terraform_vars_vm_env: "{{ env | default('lab')}}"
         terraform_vars_vm_tags:
-          - lab
+          - "{{ env | default('lab')}}"
         terraform_vars_multi_node_deployment: "{{ multi_node_deployment | default(true) }}"
         terraform_vars_target_node: "{{ target_node | default(omit) }}"
         terraform_vars_vm_attr: {"master": { "ram": 2048, "cpu": 2, "vlan": 66 }, "worker": { "ram": 1024, "cpu": 1, "vlan": 66 }}
