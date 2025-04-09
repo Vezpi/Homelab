@@ -6,25 +6,17 @@
     - ansible.builtin.import_role:
         name: terraform_vm
       vars:
+        terraform_vm_state: "{{ state | default(omit) }}"
         terraform_vm_project_path: /home/vez/homelab/terraform/projects/terransible
         terraform_vars_vm_env: lab
         terraform_vars_vm_tags:
           - lab
-        # terraform_vars_multi_node_deployment: false
-        # terraform_vars_target_node: zenith
-        terraform_vars_vm_attr:
-          master:
-            ram: 2048
-            cpu: 2
-            vlan: 66
-          worker:
-            ram: 1024
-            cpu: 1
-            vlan: 66
+        terraform_vars_multi_node_deployment: "{{ multi_node_deployment | default(true) }}"
+        terraform_vars_target_node: "{{ target_node | default(omit) }}"
+        terraform_vars_vm_attr: {"master": { "ram": 2048, "cpu": 2, "vlan": 66 }, "worker": { "ram": 1024, "cpu": 1, "vlan": 66 }}
 
 - name: Ping
   hosts: all
-  gather_facts: false
   tasks:
     - name: Ping all the hosts
       ansible.builtin.ping:

@@ -1,8 +1,10 @@
 ---
 - name: Deploy a Terraform infrastructure
+  delegate_to: localhost
   cloud.terraform.terraform:
     project_path: "{{ terraform_vm_project_path }}"
     state: "{{ terraform_vm_state }}"
+    parallelism: 3
     complex_vars: true
     variables: 
       multi_node_deployment: "{{ terraform_vars_multi_node_deployment | default(omit)}}"
