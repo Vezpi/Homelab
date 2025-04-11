@@ -1,2 +1,3 @@
 ---
+terraform_ansible_inventory: /home/vez/homelab/ansible/inventories/terraform.yml
 terraform_vm_state: present

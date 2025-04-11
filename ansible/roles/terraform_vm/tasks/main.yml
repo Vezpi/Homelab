@@ -4,6 +4,7 @@
   cloud.terraform.terraform:
     project_path: "{{ terraform_vm_project_path }}"
     state: "{{ terraform_vm_state }}"
+    workspace: "{{ terraform_vars_vm_env | default(omit)}}"
     parallelism: 3
     complex_vars: true
     variables: 
@@ -12,7 +13,13 @@
       vm_attr: "{{ terraform_vars_vm_attr | default(omit)}}"
       vm_env: "{{ terraform_vars_vm_env | default(omit)}}"
       vm_tags: "{{ terraform_vars_vm_tags | default(omit)}}"
-  retries: 1
+
+- name: Update Terraform workspace path
+  ansible.builtin.lineinfile:
+    path: "{{ terraform_ansible_inventory }}"
+    regexp: '^state_file:.*tfstate$'
+    line: "state_file: terraform.tfstate.d/{{ terraform_vars_vm_env }}/terraform.tfstate"
+  when: terraform_vars_vm_env is defined
 
 - name: Refresh inventory
   ansible.builtin.meta: refresh_inventory

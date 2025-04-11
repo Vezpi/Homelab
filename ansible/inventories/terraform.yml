@@ -2,3 +2,4 @@
 plugin: cloud.terraform.terraform_provider
 project_path:
   - /home/vez/homelab/terraform/projects/terransible
+state_file: terraform.tfstate.d/lab/terraform.tfstate
