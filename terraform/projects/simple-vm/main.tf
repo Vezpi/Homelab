@@ -94,6 +94,12 @@ resource "proxmox_virtual_environment_vm" "vm" {
   vga {
     type = "std"                    # Standard VGA type
   }
+
+  lifecycle {
+    ignore_changes = [              # Ignore initialization section after first depoloyment for idempotency
+      initialization
+    ]
+  }
 }
 
 # Output the assigned IP address of the VM after provisioning
