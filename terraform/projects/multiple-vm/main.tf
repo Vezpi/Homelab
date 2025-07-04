@@ -6,25 +6,20 @@ module "pve_vm" {
   vm_cpu    = each.value.vm_cpu
   vm_ram    = each.value.vm_ram
   vm_vlan   = each.value.vm_vlan
+  proxmox_endpoint  = var.proxmox_endpoint
+  proxmox_api_token = var.proxmox_api_token
 }
 
 locals {
-  vm_attr = {
-    "master" = { ram = 2048, cpu = 2, vlan = 66 }
-    "worker" = { ram = 1024, cpu = 1, vlan = 66 }
-  }
-
   vm_list = {
     for vm in flatten([
-      for node in data.proxmox_virtual_environment_nodes.pve_nodes.names : [
-        for role, config in local.vm_attr : {
-          node_name = node
-          vm_name   = "${role}-${node}"
-          vm_cpu    = config.cpu
-          vm_ram    = config.ram
-          vm_vlan   = config.vlan
-        }
-      ]
+      for node in data.proxmox_virtual_environment_nodes.pve_nodes.names : {
+        node_name = node
+        vm_name   = "${role}-${node}"
+        vm_cpu    = config.cpu
+        vm_ram    = config.ram
+        vm_vlan   = config.vlan
+      }
     ]) : vm.vm_name => vm
   }
 }
