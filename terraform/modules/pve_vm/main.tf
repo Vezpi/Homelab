@@ -13,7 +13,7 @@ resource "proxmox_virtual_environment_file" "cloud_config" {
   node_name    = var.node_name     # The Proxmox node where the file will be uploaded
 
   source_raw {
-    file_name = "vm.cloud-config.yaml" # The name of the snippet file
+    file_name = "${var.vm_name}.cloud-config.yaml" # The name of the snippet file
     data      = <<-EOF
     #cloud-config
     hostname: ${var.vm_name}
