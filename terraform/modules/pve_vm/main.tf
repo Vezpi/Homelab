@@ -66,9 +66,9 @@ resource "proxmox_virtual_environment_vm" "vm" {
   }
 
   disk {
-    datastore_id = var.node_datastore # Datastore to hold the disk
+    datastore_id = var.node_datastore  # Datastore to hold the disk
     interface    = "scsi0"             # Primary disk interface
-    size         = 10                   # Disk size in GB
+    size         = var.vm_disk_size    # Disk size in GB
   }
 
   initialization {

@@ -44,6 +44,12 @@ variable "vm_ram" {
   default     = 2048
 }
 
+variable "vm_disk_size" {
+  description = "Size of the disk (GB) of the VM"
+  type        = number
+  default     = 10
+}
+
 variable "vm_bios" {
   description = "Type of BIOS used for the VM"
   type        = string
