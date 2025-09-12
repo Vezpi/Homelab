@@ -83,8 +83,7 @@ resource "proxmox_virtual_environment_vm" "vm" {
   }
 
   network_device {
-    bridge  = "vmbr0"               # Use the default bridge
-    vlan_id = var.vm_vlan           # VLAN tagging if used
+    bridge  = "vlan${var.vm_vlan}"  # VNet used with VLAN ID
   }
 
   operating_system {
