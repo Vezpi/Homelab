@@ -26,8 +26,7 @@ resource "proxmox_virtual_environment_file" "cloud_config" {
       - name: ${var.vm_user}
         groups: sudo
         shell: /bin/bash
-        ssh-authorized-keys:
-          - "${var.vm_user_sshkey}" # Inject user's SSH key
+        ssh-authorized-keys: ${jsonencode(var.vm_user_sshkeys)} # Inject user's SSH key
         sudo: ALL=(ALL) NOPASSWD:ALL
     runcmd:
       - systemctl enable qemu-guest-agent 

@@ -26,10 +26,13 @@ variable "vm_user" {
   default     = "vez"
 }
 
-variable "vm_user_sshkey" {
-  description = "Admin user SSH key of the VM"
-  type        = string
-  default     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID62LmYRu1rDUha3timAIcA39LtcIOny1iAgFLnxoBxm vez@bastion"
+variable "vm_user_sshkeys" {
+  description = "Admin user SSH keys of the VM"
+  type        = list(string)
+  default     = [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID62LmYRu1rDUha3timAIcA39LtcIOny1iAgFLnxoBxm vez@bastion",
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHovfHKpqTvwj5zrcSuSZALa8iiH6qBvE5dyJCz9eQ2k vez@surface"
+  ]
 }
 
 variable "vm_cpu" {
