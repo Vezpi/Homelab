@@ -8,3 +8,15 @@ variable "proxmox_api_token" {
   type        = string
   sensitive   = true
 }
+
+variable "proxmox_ssh_username" {
+  description = "Proxmox SSH username"
+  type        = string
+  sensitive   = true
+}
+
+variable "proxmox_ssh_password" {
+  description = "Proxmox SSH password"
+  type        = string
+  sensitive   = true
+}
