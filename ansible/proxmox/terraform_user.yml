@@ -1,0 +1,20 @@
+---
+- name: Create Terraform local user for Proxmox
+  hosts: nodes
+  become: true
+  tasks:
+  
+    - name: Create terraform user
+      ansible.builtin.user:
+        name: "{{ terraform_user }}"
+        password: "{{ terraform_password | password_hash('sha512') }}"
+        shell: /bin/bash
+
+    - name: Create sudoers file for terraform user
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/{{ terraform_user }}
+        mode: '0440'
+        content: |
+          {{ terraform_user }} ALL=(root) NOPASSWD: /sbin/pvesm
+          {{ terraform_user }} ALL=(root) NOPASSWD: /sbin/qm
+          {{ terraform_user }} ALL=(root) NOPASSWD: /usr/bin/tee /var/lib/vz/*
