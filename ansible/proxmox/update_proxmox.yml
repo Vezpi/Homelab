@@ -1,0 +1,200 @@
+---
+- name: Check Proxmox VE cluster health
+  hosts: nodes
+  any_errors_fatal: true
+  become: true
+  tasks:
+
+    - delegate_to: "{{ groups['nodes'][0] }}"
+      run_once: true
+      block:
+
+        - name: Verify cluster quorum
+          ansible.builtin.command: pvecm status
+          register: quorum_status
+          changed_when: false
+          failed_when: quorum_status.stdout is not search('Quorate:\\s*Yes')
+          
+        - name: Verify Ceph health
+          ansible.builtin.command: ceph health
+          register: ceph_health
+          changed_when: false
+          failed_when: "'HEALTH_OK' not in ceph_health.stdout"
+
+      rescue:
+
+        - name: Send no ready notification
+          ansible.builtin.uri:
+            url: "{{  ntfy_url }}/{{ ntfy_topic }}"
+            method: POST
+            user: "{{ ntfy_user }}"
+            password: "{{ lookup('env', 'NTFY_PASSWORD') }}"
+            force_basic_auth: true
+            body: No updates have been rolled out
+            headers:
+              Title: "Proxmox VE Not Ready for Updates"
+              Priority: "default"
+              Tags: "x"
+          delegate_to: localhost
+          become: false
+          run_once: true
+          when: ntfy_url is defined
+
+        - ansible.builtin.fail:
+            msg: "Update aborted"
+
+
+- name: Rolling update of Proxmox VE cluster
+  hosts: nodes
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  tasks:
+
+    - block:
+
+        - name: Refresh repositories
+          ansible.builtin.apt:
+            update_cache: true
+
+        - name: Check if updates are available
+          ansible.builtin.apt:
+            upgrade: dist
+          check_mode: true
+          register: apt_check
+
+        - name: Proceed if updates are available
+          when: apt_check.changed
+          block:         
+
+          - name: Get version before upgrade
+            ansible.builtin.shell: pveversion | awk -F'/' '{print $2}'
+            register: pve_old_version
+            changed_when: false
+
+          - name: Enable maintenance mode
+            ansible.builtin.command: >
+              ha-manager crm-command node-maintenance enable {{ inventory_hostname_short }}
+
+          - name: Wait for LXCs to leave node
+            ansible.builtin.shell: |
+              pct list | awk 'NR>1 && $2=="running" {count++} END {print count+0}'
+            register: lxc_count
+            changed_when: false
+            until: lxc_count.stdout | int == 0
+            retries: 60
+            delay: 15
+
+          - name: Wait for VMs to leave node
+            ansible.builtin.shell: |
+              qm list | awk 'NR>1 && $3=="running" {count++} END {print count+0}'
+            register: vm_count
+            changed_when: false
+            until: vm_count.stdout | int == 0
+            retries: 60
+            delay: 15
+
+          - name: Update packages
+            ansible.builtin.apt:
+              upgrade: full
+              autoremove: true
+              autoclean: true
+              
+          - name: Disable Ceph rebalancing
+            ansible.builtin.command: ceph osd set noout
+
+          - name: Reboot node
+            ansible.builtin.reboot:
+              reboot_timeout: 900
+              post_reboot_delay: 30
+              
+          - name: Enable Ceph rebalancing
+            ansible.builtin.command: ceph osd unset noout
+
+          - name: Disable maintenance mode
+            ansible.builtin.command: >
+              ha-manager crm-command node-maintenance disable {{ inventory_hostname_short }}
+
+          - name: Get version after upgrade
+            ansible.builtin.shell: pveversion | awk -F'/' '{print $2}'
+            register: pve_new_version
+            changed_when: false
+
+          - name: Save update report
+            ansible.builtin.set_fact:
+              update_report:
+                old: "{{ pve_old_version.stdout }}"
+                new: "{{ pve_new_version.stdout }}"
+
+          - name: Wait for Ceph to be healthy
+            ansible.builtin.command: ceph health
+            register: ceph_status
+            changed_when: false
+            until: "'HEALTH_OK' in ceph_status.stdout"
+            retries: 60
+            delay: 15
+            delegate_to: "{{ groups['nodes'][0] }}"
+          
+      rescue:
+
+        - name: Send failure notification
+          ansible.builtin.uri:
+            url: "{{  ntfy_url }}/{{ ntfy_topic }}"
+            method: POST
+            user: "{{ ntfy_user }}"
+            password: "{{ lookup('env', 'NTFY_PASSWORD') }}"
+            force_basic_auth: true
+            body: Update failed on {{ inventory_hostname_short }}
+            headers:
+              Title: "Proxmox VE Update Failed"
+              Priority: "high"
+              Tags: "x"
+          delegate_to: localhost
+          become: false
+          run_once: true
+          when: ntfy_url is defined
+
+        - ansible.builtin.fail:
+            msg: "Update aborted"
+
+
+- name: Send notification
+  hosts: localhost
+  tasks:
+
+    - name: Determine if updates occurred
+      ansible.builtin.set_fact:
+        updates_performed: "{{ groups['nodes'] | map('extract', hostvars) | selectattr('update_report', 'defined') | list | length > 0 }}"
+
+    - name: Send success notification
+      ansible.builtin.uri:
+        url: "{{  ntfy_url }}/{{ ntfy_topic }}"
+        method: POST
+        user: "{{ ntfy_user }}"
+        password: "{{ lookup('env', 'NTFY_PASSWORD') }}"
+        force_basic_auth: true
+        body: |
+          {% set updated_nodes = [] %}
+          {% for node in groups['nodes'] %}
+            {% if hostvars[node].update_report is defined %}
+              {% set _ = updated_nodes.append(node) %}
+            {% endif %}
+          {% endfor %}
+          {% if not updates_performed %}
+          No updates available on the cluster.
+          {% else %}
+          The following nodes were updated:
+          {% for node in updated_nodes %}
+          {% if hostvars[node].update_report.old == hostvars[node].update_report.new %}
+          - {{ hostvars[node].inventory_hostname_short }}: version {{ hostvars[node].update_report.old }} (unchanged)
+          {% else %}
+          - {{ hostvars[node].inventory_hostname_short }}: version {{ hostvars[node].update_report.old }} → {{ hostvars[node].update_report.new }}
+          {% endif %}
+          {% endfor %}
+          {% endif %}
+        headers:
+          Title: "Proxmox VE Update Report"
+          Priority: "{{ 'min' if not updates_performed else 'default' }}"
+          Tags: "white_check_mark"
+      when: ntfy_url is defined
+
