@@ -1,0 +1,90 @@
+#!/usr/local/bin/php
+<?php
+/**
+ * Author 2025 Etienne Girault <etienne.girault@gmail.com>
+ * OPNsense CARP event script
+ * - Enables/disables the WAN interface only when needed
+ * - Avoids reapplying config when CARP triggers multiple times
+ */
+
+require_once("config.inc");
+require_once("interfaces.inc");
+require_once("util.inc");
+require_once("system.inc");
+
+// Read CARP event arguments
+$subsystem = !empty($argv[1]) ? $argv[1] : '';
+$type = !empty($argv[2]) ? $argv[2] : '';
+
+// Accept only MASTER/BACKUP events
+if (!in_array($type, ['MASTER', 'BACKUP'])) {
+    // Ignore CARP INIT, DEMOTED, etc.
+    exit(0);
+}
+
+// Validate subsystem name format, expected pattern: <ifname>@<vhid>
+if (!preg_match('/^[a-z0-9_]+@\S+$/i', $subsystem)) {
+    log_error("Malformed subsystem argument: '{$subsystem}'.");
+    exit(0);
+}
+
+// Only react to the primary VHID
+list($vhid, $iface) = explode('@', $subsystem);
+$primary_vhid = '1'; //
+
+if ($vhid !== $primary_vhid) {
+    exit(0); // ignore events from other VHIDs
+}
+
+// Interface key to manage
+$ifkey = 'wan';
+// Determine whether WAN interface is currently enabled
+$ifkey_enabled = !empty($config['interfaces'][$ifkey]['enable']) ? true : false;
+// Lock file to prevent interface flapping
+$lock_file = '/tmp/carp_wan_disable_lock';
+$lock_default_age = 5;
+$lock_max_age = 10;
+
+// MASTER event
+if ($type === "MASTER") {
+    // Enable WAN only if it's currently disabled
+    if (!$ifkey_enabled) {
+        // Check if lock file is present
+        if (file_exists($lock_file)) {
+            $lock_age = time() - (int)file_get_contents($lock_file);
+            if ($lock_age < $lock_max_age) {
+                log_msg("CARP event: WAN disable lock present ({$lock_age}s old), waiting...");
+                $elapsed = 0;
+                while (file_exists($lock_file) && $elapsed < 5000) {
+                    usleep(500000);
+                    $elapsed += 500;
+                }
+            } else {
+                log_msg("CARP event: removing stale WAN disable lock.");
+                @unlink($lock_file);
+            }
+        }
+        log_msg("CARP event: switching to '$type', enabling interface '$ifkey'.", LOG_WARNING);
+        $config['interfaces'][$ifkey]['enable'] = '1';
+        write_config("enable interface '$ifkey' due CARP event '$type'", false);
+        interface_configure(false, $ifkey, false, false);
+    } else {
+        log_msg("CARP event: already 'MASTER' for interface '$ifkey', nothing to do.");
+    }
+
+// BACKUP event
+} else {
+    // Disable WAN only if it's currently enabled
+    if ($ifkey_enabled) {
+        log_msg("CARP event: switching to '$type', disabling interface '$ifkey'.", LOG_WARNING);
+        unset($config['interfaces'][$ifkey]['enable']);
+        write_config("disable interface '$ifkey' due CARP event '$type'", false);
+        interface_configure(false, $ifkey, false, false);
+        // Create lock file
+        file_put_contents($lock_file, time());
+        sleep($lock_default_age);
+        @unlink($lock_file);
+    } else {
+        log_msg("CARP event: already '$type' for interface '$ifkey', nothing to do.");
+    }
+}
