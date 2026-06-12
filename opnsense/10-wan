@@ -38,6 +38,9 @@ if ($vhid !== $primary_vhid) {
 
 // Interface key to manage
 $ifkey = 'wan';
+$real_if = get_real_interface('wan');
+// Fallback gateway name
+$gw_name = 'LAN_GW';
 // Determine whether WAN interface is currently enabled
 $ifkey_enabled = !empty($config['interfaces'][$ifkey]['enable']) ? true : false;
 // Lock file to prevent interface flapping
@@ -80,6 +83,18 @@ if ($type === "MASTER") {
         unset($config['interfaces'][$ifkey]['enable']);
         write_config("disable interface '$ifkey' due CARP event '$type'", false);
         interface_configure(false, $ifkey, false, false);
+        // Remove WAN default gateway
+        mwexec("/sbin/route delete default");
+        foreach ($config['OPNsense']['Gateways']['gateway_item'] as $gw) {
+            if ($gw['name'] === $gw_name) {
+                $gw_ip = $gw['gateway'];
+                break;
+            }
+        }
+        // Shutdown WAN interface
+        mwexec("/sbin/ifconfig {$real_if} down")
+        // Add fallback default gateway
+        mwexec("/sbin/route add default {$gw_ip}");
         // Create lock file
         file_put_contents($lock_file, time());
         sleep($lock_default_age);
