@@ -57,7 +57,7 @@
             msg: >-
               {{ inventory_hostname }}: {{ firmware_status }}
               ({{ fw_current_version }}
-              {% if fw_new_version %} → {{ fw_new_version }}{% endif %})
+              {% if fw_new_version %} → {{ fw_new_version }} (reboot: {{ needs_reboot }}){% endif %})
 
         - name: Warn — major upgrade skipped, handle manually
           ansible.builtin.debug:
