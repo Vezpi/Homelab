@@ -5,14 +5,14 @@
 - name: "Phase 1 | Firmware check on all nodes"
   hosts: opnsense
   gather_facts: false
-  vars:
-    opnsense_api_key: "{{ lookup('env', 'OPNSENSE_API_KEY') }}"
-    opnsense_api_secret: "{{ lookup('env', 'OPNSENSE_API_SECRET') }}"
+  # vars:
+  #   opnsense_api_key: "{{ lookup('env', 'OPNSENSE_API_KEY') }}"
+  #   opnsense_api_secret: "{{ lookup('env', 'OPNSENSE_API_SECRET') }}"
 
   tasks:
     - name: Check node availability
       ansible.builtin.uri:
-        url: "https://{{ ansible_host }}/api/core/system/status"
+        url: "https://{{ opnsense_host }}:4443/api/core/system/status"
         method: GET
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
