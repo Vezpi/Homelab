@@ -17,7 +17,7 @@
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
         force_basic_auth: true
-        validate_certs: false
+        # validate_certs: false
         # body_format: json
         # body: {}
 
