@@ -29,6 +29,16 @@
             force_basic_auth: true
             validate_certs: false
 
+        - name: Check VIP status 
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/diagnostics/interface/get_vip_status"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _vip_status
+
         - name: Wait for check to complete
           ansible.builtin.uri:
             url: "https://{{ opnsense_host }}/api/core/firmware/status"
