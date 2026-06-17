@@ -4,70 +4,66 @@
 ###############################################################
 - name: "Phase 1 | Firmware check on all nodes"
   hosts: opnsense
+  any_errors_fatal: true
   gather_facts: false
-  # vars:
-  #   opnsense_api_key: "{{ lookup('env', 'OPNSENSE_API_KEY') }}"
-  #   opnsense_api_secret: "{{ lookup('env', 'OPNSENSE_API_SECRET') }}"
 
   tasks:
-    - name: Check node availability
-      ansible.builtin.uri:
-        url: "https://{{ opnsense_host }}/api/core/system/status"
-        method: GET
-        user: "{{ opnsense_api_key }}"
-        password: "{{ opnsense_api_secret }}"
-        force_basic_auth: true
-        validate_certs: false
-        # body_format: json
-        # body: {}
 
+    - block:
 
-    # - name: Trigger firmware check
-    #   ansible.builtin.uri:
-    #     url: "https://{{ ansible_host }}/api/core/firmware/check"
-    #     method: POST
-    #     user: "{{ opnsense_api_key }}"
-    #     password: "{{ opnsense_api_secret }}"
-    #     force_basic_auth: true
-    #     validate_certs: false
-    #     body_format: json
-    #     body: {}
+        - name: Check node availability
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/system/status"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
 
-    # - name: Wait for check to complete
-    #   ansible.builtin.uri:
-    #     url: "https://{{ ansible_host }}/api/core/firmware/status"
-    #     method: GET
-    #     user: "{{ opnsense_api_key }}"
-    #     password: "{{ opnsense_api_secret }}"
-    #     force_basic_auth: true
-    #     validate_certs: false
-    #   register: _fw_status
-    #   until: _fw_status.json.status != 'running'
-    #   retries: 12
-    #   delay: 10
+        - name: Trigger firmware check
+          ansible.builtin.uri:
+            url: "https://{{ ansible_host }}/api/core/firmware/check"
+            method: POST
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
 
-#     - name: Store firmware facts
-#       ansible.builtin.set_fact:
-#         fw_status: "{{ _fw_status.json.status }}"
-#         fw_current_version: "{{ _fw_status.json.product_version | default('unknown') }}"
-#         fw_new_version: "{{ _fw_status.json.new_version | default('') }}"
-#         # 'pending' means updates exist; will be overwritten to success/rolled_back
-#         # If it stays 'pending' after the run, a pre-update check failed
-#         update_result: "{{ 'pending' if _fw_status.json.status == 'update' else 'skipped' }}"
+        - name: Wait for check to complete
+          ansible.builtin.uri:
+            url: "https://{{ ansible_host }}/api/core/firmware/status"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: firmware_status
+          until: firmware_status.json.status != 'none'
+          retries: 12
+          delay: 5
 
-#     - name: Display firmware status
-#       ansible.builtin.debug:
-#         msg: >-
-#           {{ inventory_hostname }}: {{ fw_status }}
-#           ({{ fw_current_version }}
-#           {% if fw_new_version %} → {{ fw_new_version }}{% endif %})
+        - name: Store firmware facts
+          ansible.builtin.set_fact:
+            firmware_status: "{{ _firmware_status.json.status }}"
+            fw_current_version: "{{ _firmware_status.json.product_version | default('unknown') }}"
+            fw_new_version: "{{ _firmware_status.json.new_version | default('') }}"
+            # 'pending' means updates exist; will be overwritten to success/rolled_back
+            # If it stays 'pending' after the run, a pre-update check failed
+            update_result: "{{ 'pending' if _firmware_status.json.status == 'update' else 'skipped' }}"
 
-#     - name: Warn — major upgrade skipped, handle manually
-#       ansible.builtin.debug:
-#         msg: >-
-#           NOTICE: {{ inventory_hostname }} has a MAJOR upgrade available
-#           ({{ fw_new_version }}). This playbook handles minor updates only.
-#       when: fw_status == 'upgrade'
+        - name: Display firmware status
+          ansible.builtin.debug:
+            msg: >-
+              {{ inventory_hostname }}: {{ firmware_status }}
+              ({{ fw_current_version }}
+              {% if fw_new_version %} → {{ fw_new_version }}{% endif %})
+
+        - name: Warn — major upgrade skipped, handle manually
+          ansible.builtin.debug:
+            msg: >-
+              NOTICE: {{ inventory_hostname }} has a MAJOR upgrade available
+              ({{ fw_new_version }}). This playbook handles minor updates only.
+          when: firmware_status == 'upgrade'
 
 
 # ###############################################################
@@ -78,7 +74,7 @@
 #   tasks:
 #     - name: Skip — no minor updates available on backup
 #       ansible.builtin.meta: end_host
-#       when: fw_status != 'update'
+#       when: firmware_status != 'update'
 
 #     # Safety: confirm backup is actually in BACKUP role before touching it
 #     - name: Verify backup node CARP role
@@ -223,7 +219,7 @@
 #   tasks:
 #     - name: Skip — no minor updates available on master
 #       ansible.builtin.meta: end_host
-#       when: fw_status != 'update'
+#       when: firmware_status != 'update'
 
 #     - name: Verify master node CARP role
 #       ansible.builtin.uri:
@@ -464,7 +460,7 @@
 #           {% for host in groups['opnsense'] %}
 #           {% set h = hostvars[host] %}
 #           {{ host }}
-#             fw check : {{ h.fw_status | default('unknown') }}
+#             fw check : {{ h.firmware_status | default('unknown') }}
 #             result   : {{ h.update_result | default('unknown') }}
 #             version  : {{ h.fw_post_version | default(h.fw_current_version | default('?')) }}
 #           {% endfor %}
