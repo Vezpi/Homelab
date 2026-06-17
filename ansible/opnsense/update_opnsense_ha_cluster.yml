@@ -12,7 +12,7 @@
   tasks:
     - name: Check node availability
       ansible.builtin.uri:
-        url: "https://{{ opnsense_host }}:4443/api/core/system/status"
+        url: "https://{{ opnsense_host }}/api/core/system/status"
         method: GET
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
