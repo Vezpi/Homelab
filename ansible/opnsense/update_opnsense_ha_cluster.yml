@@ -44,12 +44,12 @@
 
         - name: Store firmware facts
           ansible.builtin.set_fact:
-            firmware_status: "{{ _firmware_status.json.status }}"
-            fw_current_version: "{{ _firmware_status.json.product_version | default('unknown') }}"
-            fw_new_version: "{{ _firmware_status.json.new_version | default('') }}"
+            firmware_status: "{{ firmware_status.json.status }}"
+            fw_current_version: "{{ firmware_status.json.product_version | default('unknown') }}"
+            fw_new_version: "{{ firmware_status.json.new_version | default('') }}"
             # 'pending' means updates exist; will be overwritten to success/rolled_back
             # If it stays 'pending' after the run, a pre-update check failed
-            update_result: "{{ 'pending' if _firmware_status.json.status == 'update' else 'skipped' }}"
+            update_result: "{{ 'pending' if firmware_status.json.status == 'update' else 'skipped' }}"
 
         - name: Display firmware status
           ansible.builtin.debug:
