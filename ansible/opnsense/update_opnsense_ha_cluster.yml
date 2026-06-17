@@ -22,7 +22,7 @@
 
         - name: Trigger firmware check
           ansible.builtin.uri:
-            url: "https://{{ ansible_host }}/api/core/firmware/check"
+            url: "https://{{ opnsense_host }}/api/core/firmware/check"
             method: POST
             user: "{{ opnsense_api_key }}"
             password: "{{ opnsense_api_secret }}"
@@ -31,7 +31,7 @@
 
         - name: Wait for check to complete
           ansible.builtin.uri:
-            url: "https://{{ ansible_host }}/api/core/firmware/status"
+            url: "https://{{ opnsense_host }}/api/core/firmware/status"
             method: GET
             user: "{{ opnsense_api_key }}"
             password: "{{ opnsense_api_secret }}"
@@ -79,7 +79,7 @@
 #     # Safety: confirm backup is actually in BACKUP role before touching it
 #     - name: Verify backup node CARP role
 #       ansible.builtin.uri:
-#         url: "https://{{ ansible_host }}/api/carp/status/get"
+#         url: "https://{{ opnsense_host }}/api/carp/status/get"
 #         method: GET
 #         user: "{{ opnsense_api_key }}"
 #         password: "{{ opnsense_api_secret }}"
@@ -93,7 +93,7 @@
 #     # during its own reboot (avoids CARP flapping)
 #     - name: Enable CARP maintenance mode
 #       ansible.builtin.uri:
-#         url: "https://{{ ansible_host }}/api/carp/status/maintenancemode"
+#         url: "https://{{ opnsense_host }}/api/carp/status/maintenancemode"
 #         method: POST
 #         user: "{{ opnsense_api_key }}"
 #         password: "{{ opnsense_api_secret }}"
@@ -104,7 +104,7 @@
 
 #     - name: Trigger firmware update
 #       ansible.builtin.uri:
-#         url: "https://{{ ansible_host }}/api/core/firmware/update"
+#         url: "https://{{ opnsense_host }}/api/core/firmware/update"
 #         method: POST
 #         user: "{{ opnsense_api_key }}"
 #         password: "{{ opnsense_api_secret }}"
@@ -115,7 +115,7 @@
 
 #     - name: Wait for packages to install
 #       ansible.builtin.uri:
-#         url: "https://{{ ansible_host }}/api/core/firmware/running"
+#         url: "https://{{ opnsense_host }}/api/core/firmware/running"
 #         method: GET
 #         user: "{{ opnsense_api_key }}"
 #         password: "{{ opnsense_api_secret }}"
@@ -129,7 +129,7 @@
 #     # Reboot is a separate explicit step — update does NOT auto-reboot
 #     - name: Reboot node
 #       ansible.builtin.uri:
-#         url: "https://{{ ansible_host }}/api/core/firmware/reboot"
+#         url: "https://{{ opnsense_host }}/api/core/firmware/reboot"
 #         method: POST
 #         user: "{{ opnsense_api_key }}"
 #         password: "{{ opnsense_api_secret }}"
@@ -158,7 +158,7 @@
 
 #     - name: Wait for API to be fully responsive
 #       ansible.builtin.uri:
-#         url: "https://{{ ansible_host }}/api/core/firmware/status"
+#         url: "https://{{ opnsense_host }}/api/core/firmware/status"
 #         method: GET
 #         user: "{{ opnsense_api_key }}"
 #         password: "{{ opnsense_api_secret }}"
@@ -179,7 +179,7 @@
 
 #     - name: Health check — CARP role is BACKUP
 #       ansible.builtin.uri:
-#         url: "https://{{ ansible_host }}/api/carp/status/get"
+#         url: "https://{{ opnsense_host }}/api/carp/status/get"
 #         method: GET
 #         user: "{{ opnsense_api_key }}"
 #         password: "{{ opnsense_api_secret }}"
@@ -190,7 +190,7 @@
 
 #     - name: Disable CARP maintenance mode
 #       ansible.builtin.uri:
-#         url: "https://{{ ansible_host }}/api/carp/status/maintenancemode"
+#         url: "https://{{ opnsense_host }}/api/carp/status/maintenancemode"
 #         method: POST
 #         user: "{{ opnsense_api_key }}"
 #         password: "{{ opnsense_api_secret }}"
@@ -223,7 +223,7 @@
 
 #     - name: Verify master node CARP role
 #       ansible.builtin.uri:
-#         url: "https://{{ ansible_host }}/api/carp/status/get"
+#         url: "https://{{ opnsense_host }}/api/carp/status/get"
 #         method: GET
 #         user: "{{ opnsense_api_key }}"
 #         password: "{{ opnsense_api_secret }}"
@@ -248,7 +248,7 @@
 
 #     - name: Enable CARP maintenance mode (triggers controlled failover to backup)
 #       ansible.builtin.uri:
-#         url: "https://{{ ansible_host }}/api/carp/status/maintenancemode"
+#         url: "https://{{ opnsense_host }}/api/carp/status/maintenancemode"
 #         method: POST
 #         user: "{{ opnsense_api_key }}"
 #         password: "{{ opnsense_api_secret }}"
@@ -280,7 +280,7 @@
 
 #         - name: Trigger firmware update
 #           ansible.builtin.uri:
-#             url: "https://{{ ansible_host }}/api/core/firmware/update"
+#             url: "https://{{ opnsense_host }}/api/core/firmware/update"
 #             method: POST
 #             user: "{{ opnsense_api_key }}"
 #             password: "{{ opnsense_api_secret }}"
@@ -291,7 +291,7 @@
 
 #         - name: Wait for packages to install
 #           ansible.builtin.uri:
-#             url: "https://{{ ansible_host }}/api/core/firmware/running"
+#             url: "https://{{ opnsense_host }}/api/core/firmware/running"
 #             method: GET
 #             user: "{{ opnsense_api_key }}"
 #             password: "{{ opnsense_api_secret }}"
@@ -304,7 +304,7 @@
 
 #         - name: Reboot node
 #           ansible.builtin.uri:
-#             url: "https://{{ ansible_host }}/api/core/firmware/reboot"
+#             url: "https://{{ opnsense_host }}/api/core/firmware/reboot"
 #             method: POST
 #             user: "{{ opnsense_api_key }}"
 #             password: "{{ opnsense_api_secret }}"
@@ -333,7 +333,7 @@
 
 #         - name: Wait for API to be fully responsive
 #           ansible.builtin.uri:
-#             url: "https://{{ ansible_host }}/api/core/firmware/status"
+#             url: "https://{{ opnsense_host }}/api/core/firmware/status"
 #             method: GET
 #             user: "{{ opnsense_api_key }}"
 #             password: "{{ opnsense_api_secret }}"
@@ -355,7 +355,7 @@
 #         # After maintenance mode failover, master should rejoin as BACKUP
 #         - name: Health check — CARP role is BACKUP
 #           ansible.builtin.uri:
-#             url: "https://{{ ansible_host }}/api/carp/status/get"
+#             url: "https://{{ opnsense_host }}/api/carp/status/get"
 #             method: GET
 #             user: "{{ opnsense_api_key }}"
 #             password: "{{ opnsense_api_secret }}"
@@ -435,7 +435,7 @@
 #         # is effectively a no-op, but run it anyway as a safety net.
 #         - name: Disable CARP maintenance mode
 #           ansible.builtin.uri:
-#             url: "https://{{ ansible_host }}/api/carp/status/maintenancemode"
+#             url: "https://{{ opnsense_host }}/api/carp/status/maintenancemode"
 #             method: POST
 #             user: "{{ opnsense_api_key }}"
 #             password: "{{ opnsense_api_secret }}"
