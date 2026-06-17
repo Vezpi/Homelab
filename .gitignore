@@ -2,3 +2,5 @@
 **/.terraform*
 *.tfstate*
 *credentials.auto.tfvars
+# Bruno
+.bruno
