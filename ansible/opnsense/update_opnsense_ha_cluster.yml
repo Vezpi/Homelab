@@ -46,7 +46,7 @@
           ansible.builtin.set_fact:
             firmware_status: "{{ _firmware_status.json.status }}"
             fw_current_version: "{{ _firmware_status.json.product_version | default('unknown') }}"
-            fw_new_version: "{{ _firmware_status.json.upgrade_packages | selecattr('name', 'equalto', 'opnsense') | map(attribute='new_version') | first | default('') }}"
+            fw_new_version: "{{ _firmware_status.json.upgrade_packages | selectattr('name', 'equalto', 'opnsense') | map(attribute='new_version') | first | default('') }}"
             needs_reboot: "{{ true if _firmware_status.json.needs_reboot == '1' else false }}"
             # 'pending' means updates exist; will be overwritten to success/rolled_back
             # If it stays 'pending' after the run, a pre-update check failed
