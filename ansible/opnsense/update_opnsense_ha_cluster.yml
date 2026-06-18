@@ -69,6 +69,7 @@
               - total_vips > 0
               - mismatched_vips == 0
               - not in_maintenance
+            quiet: true
 
         - name: Display firmware status
           ansible.builtin.debug:
@@ -82,6 +83,8 @@
         - name: Send notification
           ansible.builtin.debug:
             msg: "End of workflow, sending notification"
+
+        - fail:
 
 
 - name: "Phase 2 | Update backup node (TrueNAS, no snapshot)"
@@ -99,6 +102,10 @@
             password: "{{ opnsense_api_secret }}"
             force_basic_auth: true
             validate_certs: false
+          register: _enable_maintenance
+
+        - debug:
+            var: _enable_maintenance
 
 #     - name: Trigger firmware update
 #       ansible.builtin.uri:
