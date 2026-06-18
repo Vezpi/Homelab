@@ -65,7 +65,7 @@
         - name: Display firmware status
           ansible.builtin.debug:
             msg: >-
-              {{ inventory_hostname }}: {{ firmware_status }}
+              {{ inventory_hostname }} ({{ main_role }}): {{ firmware_status }}
               ({{ fw_current_version }}
               {% if fw_new_version %} → {{ fw_new_version }} (reboot: {{ needs_reboot }}){% endif %})
 
