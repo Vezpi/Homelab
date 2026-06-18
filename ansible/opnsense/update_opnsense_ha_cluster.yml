@@ -103,6 +103,7 @@
             force_basic_auth: true
             validate_certs: false
           register: _enable_maintenance
+          changed_when: _enable_maintenance.status == "ok"
 
         - debug:
             var: _enable_maintenance
