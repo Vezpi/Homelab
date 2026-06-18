@@ -54,8 +54,9 @@
         - name: Store firmware facts
           ansible.builtin.set_fact:
             firmware_status: "{{ _firmware_status.json.status }}"
-            fw_current_version: "{{ _firmware_status.json.product_version | default('unknown') }}"
-            fw_new_version: "{{ _firmware_status.json.upgrade_packages | selectattr('name', 'equalto', 'opnsense') | map(attribute='new_version') | first | default('') }}"
+            firmware_current_version: "{{ _firmware_status.json.product_version | default('unknown') }}"
+            firmware_new_version: "{{ _firmware_status.json.upgrade_packages | selectattr('name', 'equalto', 'opnsense') | map(attribute='new_version') | first | default('') }}"
+            firmware_upgrade_version: "{{ _firmware_status.json.upgrade_major_version | default('unknown') }}"
             needs_reboot: "{{ true if _firmware_status.json.needs_reboot == '1' else false }}"
             total_vips: "{{ _vip_status.json.rowCount }}"
             mismatched_vips: "{{ _vip_status.json.rows | rejectattr('status', 'equalto', main_role) | list | length }}"
@@ -66,25 +67,51 @@
           ansible.builtin.assert:
             that: 
               - firmware_status == 'update'
-              - total_vips > 0
-              - mismatched_vips == 0
               - not in_maintenance
+              - mismatched_vips == 0
+              - total_vips > 0
             quiet: true
 
         - name: Display firmware status
           ansible.builtin.debug:
             msg: >-
               {{ inventory_hostname }} ({{ main_role }}): {{ firmware_status }}
-              ({{ fw_current_version }}
-              {% if fw_new_version %} → {{ fw_new_version }} (reboot: {{ needs_reboot }}){% endif %})
+              ({{ firmware_current_version }}
+              {% if firmware_new_version %} → {{ firmware_new_version }} (reboot: {{ needs_reboot }}){% endif %})
 
       rescue:
 
-        - name: Send notification
-          ansible.builtin.debug:
-            msg: "End of workflow, sending notification"
+        - name: Send Ntfy notification
+          ansible.builtin.uri:
+            url: "{{  ntfy_url }}/{{ ntfy_topic }}"
+            method: POST
+            user: "{{ ntfy_user }}"
+            password: "{{ lookup('env', 'NTFY_PASSWORD') }}"
+            force_basic_auth: true
+            body: |
+              Current version: {{ firmware_current_version }}
+              {% if firmware_status != "update" %}
+                {% if firmware_status == "upgrade" %}
+              Upgrade to {{ firmware_upgrade_version }} available, relaunch the playbook manually to proceed.
+                {% else %}
+              No updates available on the cluster.
+                {% endif %}
+              {% elif in_maintenance %}
+              The node {{ ansible_host }} is in CARP maintenance mode.
+              {% elif mismatched_vips > 0 %}
+              Some VIP are not {{ main_role }} on {{ ansible_host }}.
+              {% else %}
+              No VIPs are managed.
+              {% endif %}
+            headers:
+              Title: "OPNsense update aborted"
+              Priority: "default"
+              Tags: "x"
+          run_once: true
+          when: ntfy_url is defined
 
-        - fail:
+        - ansible.builtin.fail:
+            msg: "Update aborted"
 
 
 - name: "Phase 2 | Update backup node (TrueNAS, no snapshot)"
@@ -248,7 +275,7 @@
 #         vmid: "{{ proxmox_vmid }}"
 #         state: present
 #         snapname: "{{ snap_name }}"
-#         description: "Pre-firmware-update: {{ fw_current_version }} → {{ fw_new_version }}"
+#         description: "Pre-firmware-update: {{ firmware_current_version }} → {{ firmware_new_version }}"
 #         timeout: 60
 #       delegate_to: localhost
 
@@ -433,7 +460,7 @@
 #         - name: "ROLLBACK | Record result"
 #           ansible.builtin.set_fact:
 #             update_result: "rolled_back"
-#             fw_post_version: "{{ fw_current_version }}"
+#             fw_post_version: "{{ firmware_current_version }}"
 
 #       always:
 #         # Best-effort: disable maintenance mode whether update succeeded or rolled back.
@@ -468,7 +495,7 @@
 #           {{ host }}
 #             fw check : {{ h.firmware_status | default('unknown') }}
 #             result   : {{ h.update_result | default('unknown') }}
-#             version  : {{ h.fw_post_version | default(h.fw_current_version | default('?')) }}
+#             version  : {{ h.fw_post_version | default(h.firmware_current_version | default('?')) }}
 #           {% endfor %}
 #         _any_issue: >-
 #           {{ groups['opnsense']
