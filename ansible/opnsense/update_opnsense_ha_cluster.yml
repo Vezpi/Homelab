@@ -6,7 +6,6 @@
   hosts: opnsense
   any_errors_fatal: true
   gather_facts: false
-
   tasks:
 
     - block:
@@ -58,9 +57,18 @@
             fw_current_version: "{{ _firmware_status.json.product_version | default('unknown') }}"
             fw_new_version: "{{ _firmware_status.json.upgrade_packages | selectattr('name', 'equalto', 'opnsense') | map(attribute='new_version') | first | default('') }}"
             needs_reboot: "{{ true if _firmware_status.json.needs_reboot == '1' else false }}"
-            # 'pending' means updates exist; will be overwritten to success/rolled_back
-            # If it stays 'pending' after the run, a pre-update check failed
+            total_vips: "{{ _vip_status.json.rowCount }}"
+            mismatched_vips: "{{ _vip_status.json.rows | rejectattr('status', 'equalto', expected_role) | list | length }}"
+            in_maintenance: "{{ _vip_status.json.carp.maintenancemode }}"
             update_result: "{{ 'pending' if _firmware_status.json.status == 'update' else 'skipped' }}"
+
+        - name: "Assert all VIPs are {{ expected_role }} and CARP is active (no maintenance)"
+          ansible.builtin.assert:
+            that: 
+              - firmware_status == 'update'
+              - total_vips > 0
+              - mismatched_vips == 0
+              - not in_maintenance
 
         - name: Display firmware status
           ansible.builtin.debug:
@@ -69,49 +77,28 @@
               ({{ fw_current_version }}
               {% if fw_new_version %} → {{ fw_new_version }} (reboot: {{ needs_reboot }}){% endif %})
 
-        - name: Warn — major upgrade skipped, handle manually
+      rescue:
+
+        - name: Send notification
           ansible.builtin.debug:
-            msg: >-
-              NOTICE: {{ inventory_hostname }} has a MAJOR upgrade available
-              ({{ fw_new_version }}). This playbook handles minor updates only.
-          when: firmware_status == 'upgrade'
+            msg: "End of workflow, sending notification"
 
 
-# ###############################################################
-# - name: "Phase 2 | Update backup node (TrueNAS, no snapshot)"
-#   hosts: opnsense_backup
-#   gather_facts: false
+- name: "Phase 2 | Update backup node (TrueNAS, no snapshot)"
+  hosts: opnsense_backup
+  gather_facts: false
+  tasks:
 
-#   tasks:
-#     - name: Skip — no minor updates available on backup
-#       ansible.builtin.meta: end_host
-#       when: firmware_status != 'update'
+    - block:
 
-#     # Safety: confirm backup is actually in BACKUP role before touching it
-#     - name: Verify backup node CARP role
-#       ansible.builtin.uri:
-#         url: "https://{{ opnsense_host }}/api/carp/status/get"
-#         method: GET
-#         user: "{{ opnsense_api_key }}"
-#         password: "{{ opnsense_api_secret }}"
-#         force_basic_auth: true
-#         validate_certs: false
-#       register: _carp
-#       # Abort if node is unexpectedly MASTER — updating it would disrupt traffic
-#       failed_when: _carp.json.status | upper != 'BACKUP'
-
-#     # Maintenance mode prevents the backup from attempting to take over
-#     # during its own reboot (avoids CARP flapping)
-#     - name: Enable CARP maintenance mode
-#       ansible.builtin.uri:
-#         url: "https://{{ opnsense_host }}/api/carp/status/maintenancemode"
-#         method: POST
-#         user: "{{ opnsense_api_key }}"
-#         password: "{{ opnsense_api_secret }}"
-#         force_basic_auth: true
-#         validate_certs: false
-#         body_format: json
-#         body: {}
+        - name: Enable CARP maintenance mode
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/diagnostics/interface/carp_status/maintenance"
+            method: POST
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
 
 #     - name: Trigger firmware update
 #       ansible.builtin.uri:
