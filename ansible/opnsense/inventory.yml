@@ -1,0 +1,19 @@
+---
+all:
+  children:
+    opnsense:
+      vars:
+        ansible_connection: local
+      children:
+        opnsense_backup:
+          hosts:
+            cerbere-head2:
+              ansible_host: 192.168.88.3
+              main_role: BACKUP
+              hypervisor: TrueNAS
+        opnsense_master:
+          hosts:
+            cerbere-head1:
+              ansible_host: 192.168.88.2
+              main_role: MASTER
+              hypervisor: Proxmox
