@@ -58,11 +58,11 @@
             fw_new_version: "{{ _firmware_status.json.upgrade_packages | selectattr('name', 'equalto', 'opnsense') | map(attribute='new_version') | first | default('') }}"
             needs_reboot: "{{ true if _firmware_status.json.needs_reboot == '1' else false }}"
             total_vips: "{{ _vip_status.json.rowCount }}"
-            mismatched_vips: "{{ _vip_status.json.rows | rejectattr('status', 'equalto', expected_role) | list | length }}"
+            mismatched_vips: "{{ _vip_status.json.rows | rejectattr('status', 'equalto', main_role) | list | length }}"
             in_maintenance: "{{ _vip_status.json.carp.maintenancemode }}"
             update_result: "{{ 'pending' if _firmware_status.json.status == 'update' else 'skipped' }}"
 
-        - name: "Assert all VIPs are {{ expected_role }} and CARP is active (no maintenance)"
+        - name: "Assert"
           ansible.builtin.assert:
             that: 
               - firmware_status == 'update'
