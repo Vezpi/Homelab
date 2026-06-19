@@ -94,6 +94,10 @@
             retries: 60
             delay: 15
 
+          - name: Pause 15s 
+            ansible.builtin.pause:
+              seconds: 15
+
           - name: Update packages
             ansible.builtin.apt:
               upgrade: full
