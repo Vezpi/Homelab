@@ -61,7 +61,15 @@
             total_vips: "{{ _vip_status.json.rowCount }}"
             mismatched_vips: "{{ _vip_status.json.rows | rejectattr('status', 'equalto', main_role) | list | length }}"
             in_maintenance: "{{ _vip_status.json.carp.maintenancemode }}"
-            update_result: "{{ 'pending' if _firmware_status.json.status == 'update' else 'skipped' }}"
+            # update_result: "{{ 'pending' if _firmware_status.json.status == 'update' else 'skipped' }}"
+
+        - name: Skip backup update
+          ansible.builtin.set_fact:
+            skip_update: true
+          delegate_to: "{{ groups['opnsense_backup'][0] }}"
+          delegate_facts: true
+          run_once: true
+          when: hostvars[groups['opnsense_backup'][0]].firmware_current_version == hostvars[groups['opnsense_master'][0]].firmware_new_version  
 
         - name: "Assert"
           ansible.builtin.assert:
@@ -150,22 +158,9 @@
             force_basic_auth: true
             validate_certs: false
           register: _update_running
-          until: _update_running.json.status != 'running'
+          until: _update_running.json.status != 'busy'
           retries: 300
           delay: 15
-
-#     # Reboot is a separate explicit step — update does NOT auto-reboot
-#     - name: Reboot node
-#       ansible.builtin.uri:
-#         url: "https://{{ opnsense_host }}/api/core/firmware/reboot"
-#         method: POST
-#         user: "{{ opnsense_api_key }}"
-#         password: "{{ opnsense_api_secret }}"
-#         force_basic_auth: true
-#         validate_certs: false
-#         body_format: json
-#         body: {}
-#       ignore_errors: true  # Node drops the connection immediately
 
 #     - name: Wait for node to go offline
 #       ansible.builtin.wait_for:
