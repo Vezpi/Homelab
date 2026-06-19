@@ -132,32 +132,27 @@
           register: _enable_maintenance
           changed_when: _enable_maintenance.status == "ok"
 
-        - debug:
-            var: _enable_maintenance
+        - name: Trigger firmware update
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/firmware/update"
+            method: POST
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
 
-#     - name: Trigger firmware update
-#       ansible.builtin.uri:
-#         url: "https://{{ opnsense_host }}/api/core/firmware/update"
-#         method: POST
-#         user: "{{ opnsense_api_key }}"
-#         password: "{{ opnsense_api_secret }}"
-#         force_basic_auth: true
-#         validate_certs: false
-#         body_format: json
-#         body: {}
-
-#     - name: Wait for packages to install
-#       ansible.builtin.uri:
-#         url: "https://{{ opnsense_host }}/api/core/firmware/running"
-#         method: GET
-#         user: "{{ opnsense_api_key }}"
-#         password: "{{ opnsense_api_secret }}"
-#         force_basic_auth: true
-#         validate_certs: false
-#       register: _running
-#       until: _running.json.status != 'running'
-#       retries: 30
-#       delay: 15
+        - name: Wait for packages to update
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/firmware/running"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _update_running
+          until: _update_running.json.status != 'running'
+          retries: 300
+          delay: 15
 
 #     # Reboot is a separate explicit step — update does NOT auto-reboot
 #     - name: Reboot node
@@ -330,8 +325,8 @@
 #             password: "{{ opnsense_api_secret }}"
 #             force_basic_auth: true
 #             validate_certs: false
-#           register: _running
-#           until: _running.json.status != 'running'
+#           register: _update_running
+#           until: _update_running.json.status != 'running'
 #           retries: 30
 #           delay: 15
 
