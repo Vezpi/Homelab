@@ -74,7 +74,7 @@
         - name: "Assert"
           ansible.builtin.assert:
             that: 
-              - firmware_status == 'update'
+              - firmware_status == 'update' or skip_update
               - not in_maintenance
               - mismatched_vips == 0
               - total_vips > 0
@@ -127,7 +127,8 @@
   gather_facts: false
   tasks:
 
-    - block:
+    - when: not skip_update | default(false)
+      block:
 
         - name: Enable CARP maintenance mode
           ansible.builtin.uri:
@@ -162,353 +163,228 @@
           retries: 300
           delay: 15
 
-#     - name: Wait for node to go offline
-#       ansible.builtin.wait_for:
-#         host: "{{ ansible_host }}"
-#         port: 443
-#         state: stopped
-#         timeout: 60
-#       delegate_to: localhost
+        - name: Wait for node to go offline
+          ansible.builtin.wait_for:
+            host: "{{ ansible_host }}"
+            port: "{{ opnsense_https_port }}"
+            state: stopped
+            timeout: 60
+          when: needs_reboot
 
-#     - name: Wait for node to come back online
-#       ansible.builtin.wait_for:
-#         host: "{{ ansible_host }}"
-#         port: 443
-#         state: started
-#         timeout: 300
-#         delay: 30
-#       delegate_to: localhost
+        - name: Wait for node to come back online
+          ansible.builtin.wait_for:
+            host: "{{ ansible_host }}"
+            port: "{{ opnsense_https_port }}"
+            state: started
+            timeout: 300
+            delay: 30
+          when: needs_reboot
 
-#     - name: Wait for API to be fully responsive
-#       ansible.builtin.uri:
-#         url: "https://{{ opnsense_host }}/api/core/firmware/status"
-#         method: GET
-#         user: "{{ opnsense_api_key }}"
-#         password: "{{ opnsense_api_secret }}"
-#         force_basic_auth: true
-#         validate_certs: false
-#       register: _post_status
-#       until: _post_status.status == 200
-#       retries: 20
-#       delay: 10
+        - name: Wait for API to be fully responsive
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/firmware/status"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _post_status
+          until: _post_status.status == 200
+          retries: 20
+          delay: 10
 
-#     - name: Health check — no remaining updates
-#       ansible.builtin.assert:
-#         that:
-#           - _post_status.json.status == 'none'
-#         fail_msg: >-
-#           Post-update firmware status is '{{ _post_status.json.status }}'
-#           on {{ inventory_hostname }}. Expected 'none'.
+        - name: Check VIP status 
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/diagnostics/interface/get_vip_status"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _carp_post_udapte
 
-#     - name: Health check — CARP role is BACKUP
-#       ansible.builtin.uri:
-#         url: "https://{{ opnsense_host }}/api/carp/status/get"
-#         method: GET
-#         user: "{{ opnsense_api_key }}"
-#         password: "{{ opnsense_api_secret }}"
-#         force_basic_auth: true
-#         validate_certs: false
-#       register: _carp_post
-#       failed_when: _carp_post.json.status | upper not in ['BACKUP', 'MAINTENANCE']
+        - name: Disable CARP maintenance mode
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/carp/status/maintenancemode"
+            method: POST
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          when: _carp_post_udapte.json.carp.maintenancemode
 
-#     - name: Disable CARP maintenance mode
-#       ansible.builtin.uri:
-#         url: "https://{{ opnsense_host }}/api/carp/status/maintenancemode"
-#         method: POST
-#         user: "{{ opnsense_api_key }}"
-#         password: "{{ opnsense_api_secret }}"
-#         force_basic_auth: true
-#         validate_certs: false
-#         body_format: json
-#         body: {}
+      rescue:
 
-#     - name: Record backup update result
-#       ansible.builtin.set_fact:
-#         update_result: "success"
-#         fw_post_version: "{{ _post_status.json.product_version | default('unknown') }}"
+        - name: Send Ntfy notification
+          ansible.builtin.uri:
+            url: "{{  ntfy_url }}/{{ ntfy_topic }}"
+            method: POST
+            user: "{{ ntfy_user }}"
+            password: "{{ lookup('env', 'NTFY_PASSWORD') }}"
+            force_basic_auth: true
+            body: |
+              TODO
+              # Current version: {{ firmware_current_version }}
+              # {% if firmware_status != "update" %}
+              #   {% if firmware_status == "upgrade" %}
+              # Upgrade to {{ firmware_upgrade_version }} available, relaunch the playbook manually to proceed.
+              #   {% else %}
+              # No updates available on the cluster.
+              #   {% endif %}
+              # {% elif in_maintenance %}
+              # The node {{ inventory_hostname }} is in CARP maintenance mode.
+              # {% elif mismatched_vips > 0 %}
+              # Some VIP are not {{ main_role }} on {{ ansible_host }}.
+              # {% else %}
+              # No VIPs are managed.
+              # {% endif %}
+            headers:
+              Title: "OPNsense update failed on {{ inventory_hostname }}"
+              Priority: "default"
+              Tags: "x"
+          run_once: true
+          when: ntfy_url is defined
 
+        - ansible.builtin.fail:
+            msg: "Update aborted"
 
-# ###############################################################
-# - name: "Phase 3 | Update master node (Proxmox, with snapshot)"
-#   hosts: opnsense_master
-#   gather_facts: false
+- name: "Phase 3 | Update master node (Proxmox, with snapshot)"
+  hosts: opnsense_master
+  gather_facts: false
+  vars:
+    proxmox_snap_name: "preupdate-{{ now().strftime('%Y%m%d-%H%M') }}"
 
-#   vars:
-#     snap_name: "preupdate-{{ now().strftime('%Y%m%d-%H%M') }}"
-#     _pve_base: "https://{{ proxmox_api_host }}/api2/json/nodes/{{ proxmox_node }}/qemu/{{ proxmox_vmid }}"
-#     _pve_auth:
-#       Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+  tasks:
 
-#   tasks:
-#     - name: Skip — no minor updates available on master
-#       ansible.builtin.meta: end_host
-#       when: firmware_status != 'update'
+    - block:
 
-#     - name: Verify master node CARP role
-#       ansible.builtin.uri:
-#         url: "https://{{ opnsense_host }}/api/carp/status/get"
-#         method: GET
-#         user: "{{ opnsense_api_key }}"
-#         password: "{{ opnsense_api_secret }}"
-#         force_basic_auth: true
-#         validate_certs: false
-#       register: _carp
-#       failed_when: _carp.json.status | upper != 'MASTER'
+        - name: Take Proxmox VM snapshot
+          community.general.proxmox_snap:
+            vmid: "{{ proxmox_vmid }}"
+            state: present
+            snapname: "{{ proxmox_snap_name }}"
+            description: "Pre-firmware-update: {{ firmware_current_version }} → {{ firmware_new_version }}"
 
-#     # Snapshot BEFORE maintenance mode — the restore point should be
-#     # a fully functioning MASTER node, not one mid-failover
-#     - name: Take Proxmox VM snapshot
-#       community.general.proxmox_snap:
-#         api_host: "{{ proxmox_api_host }}"
-#         api_token_id: "{{ proxmox_api_token_id }}"
-#         api_token_secret: "{{ proxmox_api_token_secret }}"
-#         vmid: "{{ proxmox_vmid }}"
-#         state: present
-#         snapname: "{{ snap_name }}"
-#         description: "Pre-firmware-update: {{ firmware_current_version }} → {{ firmware_new_version }}"
-#         timeout: 60
-#       delegate_to: localhost
+        - name: Enable CARP maintenance mode
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/diagnostics/interface/carp_status/maintenance"
+            method: POST
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _enable_maintenance
+          changed_when: _enable_maintenance.status == "ok"
 
-#     - name: Enable CARP maintenance mode (triggers controlled failover to backup)
-#       ansible.builtin.uri:
-#         url: "https://{{ opnsense_host }}/api/carp/status/maintenancemode"
-#         method: POST
-#         user: "{{ opnsense_api_key }}"
-#         password: "{{ opnsense_api_secret }}"
-#         force_basic_auth: true
-#         validate_certs: false
-#         body_format: json
-#         body: {}
+        - name: Trigger firmware update
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/firmware/update"
+            method: POST
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
 
-#     - name: Wait for CARP failover to settle
-#       ansible.builtin.pause:
-#         seconds: 10
+        - name: Wait for packages to update
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/firmware/running"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _update_running
+          until: _update_running.json.status != 'busy'
+          retries: 300
+          delay: 15
 
-#     # Do not proceed if the backup has not actually taken over.
-#     # A failed failover means no traffic coverage during master update.
-#     - name: Confirm backup node is now MASTER
-#       ansible.builtin.uri:
-#         url: "https://{{ hostvars[groups['opnsense_backup'][0]].ansible_host }}/api/carp/status/get"
-#         method: GET
-#         user: "{{ opnsense_api_key }}"
-#         password: "{{ opnsense_api_secret }}"
-#         force_basic_auth: true
-#         validate_certs: false
-#       register: _backup_carp
-#       delegate_to: localhost
-#       failed_when: _backup_carp.json.status | upper != 'MASTER'
+        - name: Wait for node to go offline
+          ansible.builtin.wait_for:
+            host: "{{ ansible_host }}"
+            port: "{{ opnsense_https_port }}"
+            state: stopped
+            timeout: 60
+          when: needs_reboot
 
-#     - name: Update and verify
-#       block:
+        - name: Wait for node to come back online
+          ansible.builtin.wait_for:
+            host: "{{ ansible_host }}"
+            port: "{{ opnsense_https_port }}"
+            state: started
+            timeout: 300
+            delay: 30
+          when: needs_reboot
 
-#         - name: Trigger firmware update
-#           ansible.builtin.uri:
-#             url: "https://{{ opnsense_host }}/api/core/firmware/update"
-#             method: POST
-#             user: "{{ opnsense_api_key }}"
-#             password: "{{ opnsense_api_secret }}"
-#             force_basic_auth: true
-#             validate_certs: false
-#             body_format: json
-#             body: {}
+        - name: Wait for API to be fully responsive
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/firmware/status"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _post_status
+          until: _post_status.status == 200
+          retries: 20
+          delay: 10
 
-#         - name: Wait for packages to install
-#           ansible.builtin.uri:
-#             url: "https://{{ opnsense_host }}/api/core/firmware/running"
-#             method: GET
-#             user: "{{ opnsense_api_key }}"
-#             password: "{{ opnsense_api_secret }}"
-#             force_basic_auth: true
-#             validate_certs: false
-#           register: _update_running
-#           until: _update_running.json.status != 'running'
-#           retries: 30
-#           delay: 15
+        - name: Check VIP status 
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/diagnostics/interface/get_vip_status"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _carp_post_udapte
 
-#         - name: Reboot node
-#           ansible.builtin.uri:
-#             url: "https://{{ opnsense_host }}/api/core/firmware/reboot"
-#             method: POST
-#             user: "{{ opnsense_api_key }}"
-#             password: "{{ opnsense_api_secret }}"
-#             force_basic_auth: true
-#             validate_certs: false
-#             body_format: json
-#             body: {}
-#           ignore_errors: true
+        - name: Disable CARP maintenance mode
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/carp/status/maintenancemode"
+            method: POST
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          when: _carp_post_udapte.json.carp.maintenancemode
 
-#         - name: Wait for node to go offline
-#           ansible.builtin.wait_for:
-#             host: "{{ ansible_host }}"
-#             port: 443
-#             state: stopped
-#             timeout: 60
-#           delegate_to: localhost
+      rescue:
 
-#         - name: Wait for node to come back online
-#           ansible.builtin.wait_for:
-#             host: "{{ ansible_host }}"
-#             port: 443
-#             state: started
-#             timeout: 300
-#             delay: 30
-#           delegate_to: localhost
+        - name: Rollback VM to the pre-update snapshot
+          community.proxmox.proxmox_snap:
+            vmid: "{{ proxmox_vmid }}"
+            state: rollback
+            snapname: "{{ proxmox_snap_name }}"
 
-#         - name: Wait for API to be fully responsive
-#           ansible.builtin.uri:
-#             url: "https://{{ opnsense_host }}/api/core/firmware/status"
-#             method: GET
-#             user: "{{ opnsense_api_key }}"
-#             password: "{{ opnsense_api_secret }}"
-#             force_basic_auth: true
-#             validate_certs: false
-#           register: _post_status
-#           until: _post_status.status == 200
-#           retries: 20
-#           delay: 10
+        - name: Send Ntfy notification
+          ansible.builtin.uri:
+            url: "{{  ntfy_url }}/{{ ntfy_topic }}"
+            method: POST
+            user: "{{ ntfy_user }}"
+            password: "{{ lookup('env', 'NTFY_PASSWORD') }}"
+            force_basic_auth: true
+            body: |
+              TODO
+              # Current version: {{ firmware_current_version }}
+              # {% if firmware_status != "update" %}
+              #   {% if firmware_status == "upgrade" %}
+              # Upgrade to {{ firmware_upgrade_version }} available, relaunch the playbook manually to proceed.
+              #   {% else %}
+              # No updates available on the cluster.
+              #   {% endif %}
+              # {% elif in_maintenance %}
+              # The node {{ inventory_hostname }} is in CARP maintenance mode.
+              # {% elif mismatched_vips > 0 %}
+              # Some VIP are not {{ main_role }} on {{ ansible_host }}.
+              # {% else %}
+              # No VIPs are managed.
+              # {% endif %}
+            headers:
+              Title: "OPNsense update failed on {{ inventory_hostname }}"
+              Priority: "default"
+              Tags: "x"
+          run_once: true
+          when: ntfy_url is defined
 
-#         - name: Health check — no remaining updates
-#           ansible.builtin.assert:
-#             that:
-#               - _post_status.json.status == 'none'
-#             fail_msg: >-
-#               Post-update firmware status is '{{ _post_status.json.status }}'.
-#               Expected 'none'. Triggering rollback.
-
-#         # After maintenance mode failover, master should rejoin as BACKUP
-#         - name: Health check — CARP role is BACKUP
-#           ansible.builtin.uri:
-#             url: "https://{{ opnsense_host }}/api/carp/status/get"
-#             method: GET
-#             user: "{{ opnsense_api_key }}"
-#             password: "{{ opnsense_api_secret }}"
-#             force_basic_auth: true
-#             validate_certs: false
-#           register: _carp_post
-#           failed_when: _carp_post.json.status | upper not in ['BACKUP', 'MAINTENANCE']
-
-#         - name: Record master update result
-#           ansible.builtin.set_fact:
-#             update_result: "success"
-#             fw_post_version: "{{ _post_status.json.product_version | default('unknown') }}"
-
-#       rescue:
-#         # Snapshot was taken before maintenance mode, so the restored VM
-#         # will come back as a healthy MASTER on the previous version.
-#         # Backup (already updated) continues serving traffic during rollback.
-
-#         - name: "ROLLBACK | Stop VM"
-#           ansible.builtin.uri:
-#             url: "{{ _pve_base }}/status/stop"
-#             method: POST
-#             headers: "{{ _pve_auth }}"
-#             validate_certs: false
-#           delegate_to: localhost
-
-#         - name: "ROLLBACK | Wait for VM to stop"
-#           ansible.builtin.uri:
-#             url: "{{ _pve_base }}/status/current"
-#             method: GET
-#             headers: "{{ _pve_auth }}"
-#             validate_certs: false
-#           register: _vm_state
-#           until: _vm_state.json.data.status == 'stopped'
-#           retries: 12
-#           delay: 5
-#           delegate_to: localhost
-
-#         - name: "ROLLBACK | Restore snapshot {{ snap_name }}"
-#           ansible.builtin.uri:
-#             url: "{{ _pve_base }}/snapshot/{{ snap_name }}/rollback"
-#             method: POST
-#             headers: "{{ _pve_auth }}"
-#             validate_certs: false
-#           delegate_to: localhost
-
-#         # Proxmox rollback tasks run async; wait for completion
-#         - name: "ROLLBACK | Wait for snapshot restore to complete"
-#           ansible.builtin.pause:
-#             seconds: 30
-
-#         - name: "ROLLBACK | Start VM"
-#           ansible.builtin.uri:
-#             url: "{{ _pve_base }}/status/start"
-#             method: POST
-#             headers: "{{ _pve_auth }}"
-#             validate_certs: false
-#           delegate_to: localhost
-
-#         - name: "ROLLBACK | Wait for VM to come back online"
-#           ansible.builtin.wait_for:
-#             host: "{{ ansible_host }}"
-#             port: 443
-#             state: started
-#             timeout: 300
-#             delay: 30
-#           delegate_to: localhost
-
-#         - name: "ROLLBACK | Record result"
-#           ansible.builtin.set_fact:
-#             update_result: "rolled_back"
-#             fw_post_version: "{{ firmware_current_version }}"
-
-#       always:
-#         # Best-effort: disable maintenance mode whether update succeeded or rolled back.
-#         # On rollback, the restored snapshot predates maintenance mode so this
-#         # is effectively a no-op, but run it anyway as a safety net.
-#         - name: Disable CARP maintenance mode
-#           ansible.builtin.uri:
-#             url: "https://{{ opnsense_host }}/api/carp/status/maintenancemode"
-#             method: POST
-#             user: "{{ opnsense_api_key }}"
-#             password: "{{ opnsense_api_secret }}"
-#             force_basic_auth: true
-#             validate_certs: false
-#             body_format: json
-#             body: {}
-#           ignore_errors: true
-
-
-# ###############################################################
-# # Phase 4 targets localhost — it runs even if Phase 3 failed,
-# # because localhost was never marked as a failed host.
-# - name: "Phase 4 | Send ntfy notification"
-#   hosts: localhost
-#   gather_facts: false
-
-#   tasks:
-#     - name: Build report
-#       ansible.builtin.set_fact:
-#         _report: |
-#           {% for host in groups['opnsense'] %}
-#           {% set h = hostvars[host] %}
-#           {{ host }}
-#             fw check : {{ h.firmware_status | default('unknown') }}
-#             result   : {{ h.update_result | default('unknown') }}
-#             version  : {{ h.fw_post_version | default(h.firmware_current_version | default('?')) }}
-#           {% endfor %}
-#         _any_issue: >-
-#           {{ groups['opnsense']
-#              | map('extract', hostvars, 'update_result')
-#              | select('in', ['rolled_back', 'pending'])
-#              | list
-#              | length > 0 }}
-
-#     - name: Send ntfy notification
-#       ansible.builtin.uri:
-#         url: "{{ ntfy_url }}/{{ ntfy_topic }}"
-#         method: POST
-#         headers:
-#           Authorization: "Bearer {{ ntfy_token }}"
-#           Title: "OPNsense HA Update Report"
-#           Priority: "{{ 'high' if _any_issue else 'default' }}"
-#           Tags: "{{ 'warning' if _any_issue else 'white_check_mark' }},shield"
-#           Content-Type: "text/plain"
-#         body: "{{ _report }}"
-
-#     - name: Fail playbook if any node was rolled back or did not complete
-#       ansible.builtin.fail:
-#         msg: >-
-#           One or more nodes did not update successfully.
-#           Check ntfy report and Ansible output for details.
-#       when: _any_issue | bool
+        - ansible.builtin.fail:
+            msg: "Update aborted"
