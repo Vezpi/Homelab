@@ -97,7 +97,7 @@
               No updates available on the cluster.
                 {% endif %}
               {% elif in_maintenance %}
-              The node {{ ansible_host }} is in CARP maintenance mode.
+              The node {{ ansible_inventory }} is in CARP maintenance mode.
               {% elif mismatched_vips > 0 %}
               Some VIP are not {{ main_role }} on {{ ansible_host }}.
               {% else %}
