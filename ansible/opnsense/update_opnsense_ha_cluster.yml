@@ -141,10 +141,6 @@
           register: _enable_maintenance
           changed_when: _enable_maintenance.status == "ok"
 
-        - name: Wait for CARP failover to settle
-          ansible.builtin.pause:
-            seconds: 5
-
         - name: Trigger firmware update
           ansible.builtin.uri:
             url: "https://{{ opnsense_host }}/api/core/firmware/update"
@@ -279,6 +275,10 @@
             validate_certs: false
           register: _enable_maintenance
           changed_when: _enable_maintenance.status == "ok"
+
+        - name: Wait for CARP failover to settle
+          ansible.builtin.pause:
+            seconds: 5
 
         - name: Trigger firmware update
           ansible.builtin.uri:
