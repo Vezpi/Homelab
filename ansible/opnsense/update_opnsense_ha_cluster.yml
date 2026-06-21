@@ -141,6 +141,10 @@
           register: _enable_maintenance
           changed_when: _enable_maintenance.status == "ok"
 
+        - name: Wait for CARP failover to settle
+          ansible.builtin.pause:
+            seconds: 5
+
         - name: Trigger firmware update
           ansible.builtin.uri:
             url: "https://{{ opnsense_host }}/api/core/firmware/update"
@@ -252,7 +256,7 @@
   hosts: opnsense_master
   gather_facts: false
   vars:
-    proxmox_snap_name: "preupdate-{{ now().strftime('%Y%m%d-%H%M') }}"
+    proxmox_snap_name: "preupdate-{{ now().strftime('%Y%m%d') }}"
 
   tasks:
 
