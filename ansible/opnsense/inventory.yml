@@ -17,3 +17,4 @@ all:
               ansible_host: 192.168.88.2
               main_role: MASTER
               hypervisor: Proxmox
+              proxmox_vmid: 122
