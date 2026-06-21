@@ -114,7 +114,6 @@
             headers:
               Title: "OPNsense update aborted"
               Priority: "default"
-              Tags: "x"
           run_once: true
           when: ntfy_url is defined
 
@@ -223,30 +222,18 @@
             password: "{{ lookup('env', 'NTFY_PASSWORD') }}"
             force_basic_auth: true
             body: |
-              TODO
-              # Current version: {{ firmware_current_version }}
-              # {% if firmware_status != "update" %}
-              #   {% if firmware_status == "upgrade" %}
-              # Upgrade to {{ firmware_upgrade_version }} available, relaunch the playbook manually to proceed.
-              #   {% else %}
-              # No updates available on the cluster.
-              #   {% endif %}
-              # {% elif in_maintenance %}
-              # The node {{ inventory_hostname }} is in CARP maintenance mode.
-              # {% elif mismatched_vips > 0 %}
-              # Some VIP are not {{ main_role }} on {{ ansible_host }}.
-              # {% else %}
-              # No VIPs are managed.
-              # {% endif %}
+              Current version: {{ firmware_current_version }}
+              Update to {{ firmware_new_version }} failed on {{ inventory_hostname }} ({{ main_role }}).
+              No snapshot have been taken before the update.
             headers:
               Title: "OPNsense update failed on {{ inventory_hostname }}"
-              Priority: "default"
+              Priority: "high"
               Tags: "x"
           run_once: true
           when: ntfy_url is defined
 
         - ansible.builtin.fail:
-            msg: "Update aborted"
+            msg: "Update failed"
 
 - name: "Phase 3 | Update master node (Proxmox, with snapshot)"
   hosts: opnsense_master
@@ -289,7 +276,7 @@
             force_basic_auth: true
             validate_certs: false
 
-        - name: Wait for packages to update
+        - name: Check if the update is running
           ansible.builtin.uri:
             url: "https://{{ opnsense_host }}/api/core/firmware/running"
             method: GET
@@ -298,16 +285,18 @@
             force_basic_auth: true
             validate_certs: false
           register: _update_running
-          until: _update_running.json.status != 'busy'
-          retries: 300
-          delay: 15
+
+        - name: Assert the update is running
+          ansible.builtin.assert:
+            that: _update_running.json.status == 'busy'
+            quiet: true
 
         - name: Wait for node to go offline
           ansible.builtin.wait_for:
             host: "{{ ansible_host }}"
             port: "{{ opnsense_https_port }}"
             state: stopped
-            timeout: 60
+            timeout: 3600
           when: needs_reboot
 
         - name: Wait for node to come back online
@@ -319,18 +308,22 @@
             delay: 30
           when: needs_reboot
 
-        - name: Wait for API to be fully responsive
+        - name: Check firmware version
           ansible.builtin.uri:
-            url: "https://{{ opnsense_host }}/api/core/firmware/status"
-            method: GET
+            url: "https://{{ opnsense_host }}/api/core/firmware/check"
+            method: POST
             user: "{{ opnsense_api_key }}"
             password: "{{ opnsense_api_secret }}"
             force_basic_auth: true
             validate_certs: false
-          register: _post_status
-          until: _post_status.status == 200
-          retries: 20
-          delay: 10
+          register: _post_firmware_check
+          until: _post_firmware_check.json.product_version | default('unknown') == firmware_new_version
+          retries: 300
+          delay: 15
+
+        - name: Assert the node has been updated
+          ansible.builtin.assert:
+            that: 
 
         - name: Check VIP status 
           ansible.builtin.uri:
@@ -359,6 +352,7 @@
             vmid: "{{ proxmox_vmid }}"
             state: rollback
             snapname: "{{ proxmox_snap_name }}"
+          ignore_errors: true
 
         - name: Send Ntfy notification
           ansible.builtin.uri:
@@ -368,24 +362,12 @@
             password: "{{ lookup('env', 'NTFY_PASSWORD') }}"
             force_basic_auth: true
             body: |
-              TODO
-              # Current version: {{ firmware_current_version }}
-              # {% if firmware_status != "update" %}
-              #   {% if firmware_status == "upgrade" %}
-              # Upgrade to {{ firmware_upgrade_version }} available, relaunch the playbook manually to proceed.
-              #   {% else %}
-              # No updates available on the cluster.
-              #   {% endif %}
-              # {% elif in_maintenance %}
-              # The node {{ inventory_hostname }} is in CARP maintenance mode.
-              # {% elif mismatched_vips > 0 %}
-              # Some VIP are not {{ main_role }} on {{ ansible_host }}.
-              # {% else %}
-              # No VIPs are managed.
-              # {% endif %}
+              Current version: {{ firmware_current_version }}
+              Update to {{ firmware_new_version }} failed on {{ inventory_hostname }} ({{ main_role }}).
+              A snapshot have been taken before the update and the VM has been rollback.
             headers:
               Title: "OPNsense update failed on {{ inventory_hostname }}"
-              Priority: "default"
+              Priority: "high"
               Tags: "x"
           run_once: true
           when: ntfy_url is defined
