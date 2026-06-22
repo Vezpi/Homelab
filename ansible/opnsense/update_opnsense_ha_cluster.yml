@@ -363,7 +363,7 @@
             body: |
               Current version: {{ firmware_current_version }}
               Update to {{ firmware_new_version }} failed on {{ inventory_hostname }} ({{ main_role }}).
-              {% if }
+              # {% if }
               A snapshot have been taken before the update and the VM has been rollback.
             headers:
               Title: "OPNsense update failed on {{ inventory_hostname }}"
