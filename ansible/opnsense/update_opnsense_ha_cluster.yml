@@ -310,15 +310,15 @@
 
         - name: Check firmware version
           ansible.builtin.uri:
-            url: "https://{{ opnsense_host }}/api/core/firmware/check"
+            url: "https://{{ opnsense_host }}/api/core/firmware/status"
             method: POST
             user: "{{ opnsense_api_key }}"
             password: "{{ opnsense_api_secret }}"
             force_basic_auth: true
             validate_certs: false
-          register: _post_firmware_check
-          until: _post_firmware_check.json.product_version | default('unknown') == firmware_new_version
-          retries: 300
+          register: _post_firmware_status
+          until: _post_firmware_status.json.product_version | default('unknown') == firmware_new_version
+          retries: 240
           delay: 15
 
         - name: Assert the node has been updated
