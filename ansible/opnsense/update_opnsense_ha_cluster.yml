@@ -61,11 +61,11 @@
             total_vips: "{{ _vip_status.json.rowCount }}"
             mismatched_vips: "{{ _vip_status.json.rows | rejectattr('status', 'equalto', main_role) | list | length }}"
             in_maintenance: "{{ _vip_status.json.carp.maintenancemode }}"
-            # update_result: "{{ 'pending' if _firmware_status.json.status == 'update' else 'skipped' }}"
 
         - name: Skip backup update
           ansible.builtin.set_fact:
             skip_update: true
+            firmware_status: "skipped"
           delegate_to: "{{ groups['opnsense_backup'][0] }}"
           delegate_facts: true
           run_once: true
@@ -320,10 +320,6 @@
           until: _post_firmware_status.json.product_version | default('unknown') == firmware_new_version
           retries: 240
           delay: 15
-
-        - name: Assert the node has been updated
-          ansible.builtin.assert:
-            that: 
 
         - name: Check VIP status 
           ansible.builtin.uri:
