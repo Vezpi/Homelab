@@ -285,13 +285,9 @@
             force_basic_auth: true
             validate_certs: false
           register: _update_running
+          failedd_when: _update_running.json.status != 'busy'
 
-        - name: Assert the update is running
-          ansible.builtin.assert:
-            that: _update_running.json.status == 'busy'
-            quiet: true
-
-        - name: Wait for node to go offline
+        - name: Wait for node to reboot after the update
           ansible.builtin.wait_for:
             host: "{{ ansible_host }}"
             port: "{{ opnsense_https_port }}"
