@@ -247,6 +247,7 @@
 
         - name: Take Proxmox VM snapshot
           community.general.proxmox_snap:
+            api_user: "{{ lookup('env', 'PROXMOX_USER') }}"
             api_token_id: "{{ lookup('env', 'PROXMOX_TOKEN_ID') }}"
             api_token_secret: "{{ lookup('env', 'PROXMOX_TOKEN_SECRET') }}"
             vmid: "{{ proxmox_vmid }}"
