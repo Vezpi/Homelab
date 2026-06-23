@@ -74,7 +74,7 @@
         - name: "Assert"
           ansible.builtin.assert:
             that: 
-              - firmware_status == 'update' or skip_update
+              - firmware_status == 'update' or skip_update | default(false)
               - not in_maintenance
               - mismatched_vips == 0
               - total_vips > 0
