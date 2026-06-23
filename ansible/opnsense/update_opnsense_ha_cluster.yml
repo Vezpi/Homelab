@@ -285,7 +285,7 @@
             force_basic_auth: true
             validate_certs: false
           register: _update_running
-          failedd_when: _update_running.json.status != 'busy'
+          failed_when: _update_running.json.status != 'busy'
 
         - name: Wait for node to reboot after the update
           ansible.builtin.wait_for:
