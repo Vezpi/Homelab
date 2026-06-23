@@ -149,7 +149,7 @@
             force_basic_auth: true
             validate_certs: false
 
-        - name: Wait for packages to update
+        - name: Check if the update is running
           ansible.builtin.uri:
             url: "https://{{ opnsense_host }}/api/core/firmware/running"
             method: GET
@@ -158,16 +158,14 @@
             force_basic_auth: true
             validate_certs: false
           register: _update_running
-          until: _update_running.json.status != 'busy'
-          retries: 300
-          delay: 15
+          failed_when: _update_running.json.status != 'busy'
 
-        - name: Wait for node to go offline
+        - name: Wait for node to reboot after the update
           ansible.builtin.wait_for:
             host: "{{ ansible_host }}"
             port: "{{ opnsense_https_port }}"
             state: stopped
-            timeout: 60
+            timeout: 3600
           when: needs_reboot
 
         - name: Wait for node to come back online
@@ -179,19 +177,19 @@
             delay: 30
           when: needs_reboot
 
-        - name: Wait for API to be fully responsive
+        - name: Check firmware version
           ansible.builtin.uri:
             url: "https://{{ opnsense_host }}/api/core/firmware/status"
-            method: GET
+            method: POST
             user: "{{ opnsense_api_key }}"
             password: "{{ opnsense_api_secret }}"
             force_basic_auth: true
             validate_certs: false
-          register: _post_status
-          until: _post_status.status == 200
-          retries: 20
-          delay: 10
-
+          register: _post_firmware_status
+          until: _post_firmware_status.json.product_version | default('unknown') == firmware_new_version
+          retries: 240
+          delay: 15
+          
         - name: Check VIP status 
           ansible.builtin.uri:
             url: "https://{{ opnsense_host }}/api/diagnostics/interface/get_vip_status"
