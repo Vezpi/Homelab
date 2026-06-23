@@ -329,7 +329,7 @@
 
         - name: Disable CARP maintenance mode
           ansible.builtin.uri:
-            url: "https://{{ opnsense_host }}/api/carp/status/maintenancemode"
+            url: "https://{{ opnsense_host }}/api/diagnostics/interface/carp_status/maintenance"
             method: POST
             user: "{{ opnsense_api_key }}"
             password: "{{ opnsense_api_secret }}"
@@ -368,3 +368,31 @@
 
         - ansible.builtin.fail:
             msg: "Update aborted"
+
+
+- name: "Phase 4 | Notify on succes"
+  hosts: localhost
+  gather_facts: false
+  tasks:
+
+    - name: Send Ntfy notification
+      vars:
+        master: "{{ groups['opnsense_master'][0] }}"
+        backup: "{{ groups['opnsense_backup'][0] }}"
+      ansible.builtin.uri:
+        url: "{{ ntfy_url }}/{{ ntfy_topic }}"
+        method: POST
+        user: "{{ ntfy_user }}"
+        password: "{{ lookup('env', 'NTFY_PASSWORD') }}"
+        force_basic_auth: true
+        body: |
+          OPNsense HA cluster update completed successfully.
+          {% for host in [master, backup] %}
+          {% set h = hostvars[host] %}
+          {{ h.main_role }} ({{ host }}): {% if h.skip_update %}already on {{ h.firmware_current_version }}, skipped{% else %}{{ h.firmware_current_version }} → {{ h.firmware_new_version }}{% endif %}{{ "\n" if not loop.last else "" }}
+          {% endfor %}
+        headers:
+          Title: "OPNsense update completed"
+          Priority: "default"
+          Tags: "white_check_mark"
+      when: ntfy_url is defined
