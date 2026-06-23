@@ -123,6 +123,7 @@
 
 - name: "Phase 2 | Update backup node (TrueNAS, no snapshot)"
   hosts: opnsense_backup
+  any_errors_fatal: true
   gather_facts: false
   tasks:
 
@@ -189,7 +190,7 @@
           until: _post_firmware_status.json.product_version | default('unknown') == firmware_new_version
           retries: 240
           delay: 15
-          
+
         - name: Check VIP status 
           ansible.builtin.uri:
             url: "https://{{ opnsense_host }}/api/diagnostics/interface/get_vip_status"
@@ -235,6 +236,7 @@
 
 - name: "Phase 3 | Update master node (Proxmox, with snapshot)"
   hosts: opnsense_master
+  any_errors_fatal: true
   gather_facts: false
   vars:
     proxmox_snap_name: "preupdate-{{ now().strftime('%Y%m%d') }}"
