@@ -53,6 +53,7 @@
 
         - name: Store firmware facts
           ansible.builtin.set_fact:
+            firmware_action: "{{ opnsense_action | default('update')}}"
             firmware_status: "{{ _firmware_status.json.status }}"
             firmware_current_version: "{{ _firmware_status.json.product_version | default('unknown') }}"
             firmware_new_version: "{{ _firmware_status.json.upgrade_packages | selectattr('name', 'equalto', 'opnsense') | map(attribute='new_version') | first | default('') }}"
@@ -62,7 +63,7 @@
             mismatched_vips: "{{ _vip_status.json.rows | rejectattr('status', 'equalto', main_role) | list | length }}"
             in_maintenance: "{{ _vip_status.json.carp.maintenancemode }}"
 
-        - name: Skip backup update
+        - name: Skip backup {{ firmware_action }}
           ansible.builtin.set_fact:
             skip_update: true
             firmware_status: "skipped"
@@ -74,7 +75,7 @@
         - name: "Assert"
           ansible.builtin.assert:
             that: 
-              - firmware_status == 'update' or skip_update | default(false)
+              - firmware_action == firmware_status or skip_update | default(false)
               - not in_maintenance
               - mismatched_vips == 0
               - total_vips > 0
@@ -98,7 +99,7 @@
             force_basic_auth: true
             body: |
               Current version: {{ firmware_current_version }}
-              {% if firmware_status != "update" %}
+              {% if firmware_action != firmware_status %}
                 {% if firmware_status == "upgrade" %}
               Upgrade to {{ firmware_upgrade_version }} available, relaunch the playbook manually to proceed.
                 {% else %}
@@ -112,7 +113,7 @@
               No VIPs are managed.
               {% endif %}
             headers:
-              Title: "OPNsense update aborted"
+              Title: "OPNsense {{ firmware_action }} aborted"
               Priority: "default"
           run_once: true
           when: ntfy_url is defined
@@ -141,16 +142,16 @@
           register: _enable_maintenance
           changed_when: _enable_maintenance.status == "ok"
 
-        - name: Trigger firmware update
+        - name: Trigger firmware {{ firmware_action }}
           ansible.builtin.uri:
-            url: "https://{{ opnsense_host }}/api/core/firmware/update"
+            url: "https://{{ opnsense_host }}/api/core/firmware/{{ firmware_action }}"
             method: POST
             user: "{{ opnsense_api_key }}"
             password: "{{ opnsense_api_secret }}"
             force_basic_auth: true
             validate_certs: false
 
-        - name: Check if the update is running
+        - name: Check if the {{ firmware_action }} is running
           ansible.builtin.uri:
             url: "https://{{ opnsense_host }}/api/core/firmware/running"
             method: GET
@@ -161,7 +162,7 @@
           register: _update_running
           failed_when: _update_running.json.status != 'busy'
 
-        - name: Wait for node to reboot after the update
+        - name: Wait for node to reboot after the {{ firmware_action }}
           ansible.builtin.wait_for:
             host: "{{ ansible_host }}"
             port: "{{ opnsense_https_port }}"
@@ -223,10 +224,10 @@
             force_basic_auth: true
             body: |
               Current version: {{ firmware_current_version }}
-              Update to {{ firmware_new_version }} failed on {{ inventory_hostname }} ({{ main_role }}).
-              No snapshot have been taken before the update.
+              {{ firmware_action | capitalize }} to {{ firmware_new_version }} failed on {{ inventory_hostname }} ({{ main_role }}).
+              No snapshot have been taken before the {{ firmware_action }}.
             headers:
-              Title: "OPNsense update failed on {{ inventory_hostname }}"
+              Title: "OPNsense {{ firmware_action }} failed on {{ inventory_hostname }}"
               Priority: "high"
               Tags: "x"
           run_once: true
@@ -251,7 +252,7 @@
             vmid: "{{ proxmox_vmid }}"
             state: present
             snapname: "{{ proxmox_snap_name }}"
-            description: "Pre-firmware-update: {{ firmware_current_version }} → {{ firmware_new_version }}"
+            description: "Pre-firmware-{{ firmware_action }}: {{ firmware_current_version }} → {{ firmware_new_version }}"
 
         - name: Enable CARP maintenance mode
           ansible.builtin.uri:
@@ -268,16 +269,16 @@
           ansible.builtin.pause:
             seconds: 5
 
-        - name: Trigger firmware update
+        - name: Trigger firmware {{ firmware_action }}
           ansible.builtin.uri:
-            url: "https://{{ opnsense_host }}/api/core/firmware/update"
+            url: "https://{{ opnsense_host }}/api/core/firmware/{{ firmware_action }}"
             method: POST
             user: "{{ opnsense_api_key }}"
             password: "{{ opnsense_api_secret }}"
             force_basic_auth: true
             validate_certs: false
 
-        - name: Check if the update is running
+        - name: Check if the {{ firmware_action }} is running
           ansible.builtin.uri:
             url: "https://{{ opnsense_host }}/api/core/firmware/running"
             method: GET
@@ -288,7 +289,7 @@
           register: _update_running
           failed_when: _update_running.json.status != 'busy'
 
-        - name: Wait for node to reboot after the update
+        - name: Wait for node to reboot after the {{ firmware_action }}
           ansible.builtin.wait_for:
             host: "{{ ansible_host }}"
             port: "{{ opnsense_https_port }}"
@@ -341,7 +342,7 @@
 
       rescue:
 
-        - name: Rollback VM to the pre-update snapshot
+        - name: Rollback VM to the pre-{{ firmware_action }} snapshot
           community.proxmox.proxmox_snap:
             vmid: "{{ proxmox_vmid }}"
             state: rollback
@@ -358,11 +359,11 @@
             force_basic_auth: true
             body: |
               Current version: {{ firmware_current_version }}
-              Update to {{ firmware_new_version }} failed on {{ inventory_hostname }} ({{ main_role }}).
+              {{ firmware_action | capitalize }} to {{ firmware_new_version }} failed on {{ inventory_hostname }} ({{ main_role }}).
               # {% if }
-              A snapshot have been taken before the update and the VM has been rollback.
+              A snapshot have been taken before the {{ firmware_action }} and the VM has been rollback.
             headers:
-              Title: "OPNsense update failed on {{ inventory_hostname }}"
+              Title: "OPNsense {{ firmware_action }} failed on {{ inventory_hostname }}"
               Priority: "high"
               Tags: "x"
           run_once: true
@@ -388,13 +389,13 @@
         password: "{{ lookup('env', 'NTFY_PASSWORD') }}"
         force_basic_auth: true
         body: |
-          OPNsense HA cluster update completed successfully.
+          OPNsense HA cluster {{ firmware_action }} completed successfully.
           {% for host in [master, backup] %}
           {% set h = hostvars[host] %}
           {{ h.main_role }} ({{ host }}): {% if h.skip_update %}already on {{ h.firmware_current_version }}, skipped{% else %}{{ h.firmware_current_version }} → {{ h.firmware_new_version }}{% endif %}{{ "\n" if not loop.last else "" }}
           {% endfor %}
         headers:
-          Title: "OPNsense update completed"
+          Title: "OPNsense {{ firmware_action }} completed"
           Priority: "default"
           Tags: "white_check_mark"
       when: ntfy_url is defined
