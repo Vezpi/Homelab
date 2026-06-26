@@ -116,8 +116,8 @@
           run_once: true
           when: ntfy_url is defined
 
-        - ansible.builtin.fail:
-            msg: "Update aborted"
+        - name: Skip
+          ansible.builtin.meta: end_host
 
 
 - name: "Phase 2 | Update backup node (TrueNAS, no snapshot)"
