@@ -117,7 +117,7 @@
           when: ntfy_url is defined
 
         - name: Skip
-          ansible.builtin.meta: end_host
+          ansible.builtin.meta: end_play
 
 
 - name: "Phase 2 | Update backup node (TrueNAS, no snapshot)"
