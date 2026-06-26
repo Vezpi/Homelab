@@ -58,7 +58,7 @@
             firmware_current_version: "{{ _firmware_status.json.product_version | default('unknown') }}"
             firmware_new_version: "{{ _firmware_status.json.upgrade_packages | selectattr('name', 'equalto', 'opnsense') | map(attribute='new_version') | first | default('') }}"
             firmware_upgrade_version: "{{ _firmware_status.json.upgrade_major_version | default('unknown') }}"
-            firmware_upgrade_message: "{{ _firmware_status.json.upgrade_major_message | regex_replace('<[^>]+>', ' ') | regex_replace('\s{2,}', ' ') | trim | default('') }}"
+            firmware_upgrade_message: "{{ _firmware_status.json.upgrade_major_message | regex_replace('<[^>]+>', ' ') | regex_replace('\\s{2,}', ' ') | trim | default('') }}"
             needs_reboot: "{{ true if _firmware_status.json.needs_reboot == '1' else false }}"
             total_vips: "{{ _vip_status.json.rowCount }}"
             mismatched_vips: "{{ _vip_status.json.rows | rejectattr('status', 'equalto', main_role) | list | length }}"
