@@ -48,8 +48,8 @@
             validate_certs: false
           register: _firmware_status
           until: _firmware_status.json.status != 'none'
-          retries: 12
-          delay: 5
+          retries: 10
+          delay: 2
 
         - name: Store node facts
           ansible.builtin.set_fact:
