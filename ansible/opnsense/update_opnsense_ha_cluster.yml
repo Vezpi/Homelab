@@ -111,7 +111,7 @@
               No VIPs are managed.
               {% endif %}
             headers:
-              Title: "OPNsense {{ firmware_action }} aborted"
+              Title: "OPNsense {{ firmware_action }} report"
               Priority: "default"
           run_once: true
           when: ntfy_url is defined
