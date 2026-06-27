@@ -55,11 +55,14 @@
           ansible.builtin.set_fact:
             firmware_action: "{{ opnsense_action | default('update')}}"
             firmware_status: "{{ _firmware_status.json.status }}"
-            firmware_current_version: "{{ _firmware_status.json.product_version | default('unknown') }}"
+            firmware_current_version: "{{ _firmware_status.json.product.product_version | default('unknown') }}"
+            firmware_product_series: "{{ _firmware_status.json.product.product_series | default('unknown') }}"
             firmware_new_version: "{{ _firmware_status.json.upgrade_packages | selectattr('name', 'equalto', 'opnsense') | map(attribute='new_version') | first | default('') }}"
             firmware_upgrade_version: "{{ _firmware_status.json.upgrade_major_version | default('unknown') }}"
             firmware_upgrade_message: "{{ _firmware_status.json.upgrade_major_message | regex_replace('<[^>]+>', ' ') | regex_replace('\\s{2,}', ' ') | trim | default('') }}"
-            needs_reboot: "{{ true if _firmware_status.json.needs_reboot == '1' else false }}"
+            firmware_target_kind: "{{ 'series' if firmware_status == 'upgrade' else 'version' }}"
+            firmware_target_value: "{{ firmware_upgrade_version if firmware_status == 'upgrade' else firmware_new_version }}"
+            needs_reboot: "{{ (_firmware_status.json.upgrade_needs_reboot if opnsense_action == 'upgrade' else _firmware_status.json.needs_reboot) == '1' }}"
             total_vips: "{{ _vip_status.json.rowCount }}"
             mismatched_vips: "{{ _vip_status.json.rows | rejectattr('status', 'equalto', main_role) | list | length }}"
             in_maintenance: "{{ _vip_status.json.carp.maintenancemode }}"
@@ -72,7 +75,12 @@
           delegate_facts: true
           run_once: true
           when: hostvars[groups['opnsense_backup'][0]].firmware_current_version == hostvars[groups['opnsense_master'][0]].firmware_new_version  
-
+          when: >-
+            (hostvars[groups['opnsense_backup'][0]]
+            ['firmware_current_version'
+            if hostvars[groups['opnsense_master'][0]].firmware_target_kind == 'version'
+            else 'firmware_product_series'])
+            == hostvars[groups['opnsense_master'][0]].firmware_target_value
         - name: "Assert"
           ansible.builtin.assert:
             that: 
@@ -186,7 +194,7 @@
             force_basic_auth: true
             validate_certs: false
           register: _post_firmware_status
-          until: _post_firmware_status.json.product_version | default('unknown') == firmware_new_version
+          until: _post_firmware_status.json['product_' ~ firmware_target_kind] | default('unknown') == firmware_target_value
           retries: 240
           delay: 15
 
@@ -313,7 +321,7 @@
             force_basic_auth: true
             validate_certs: false
           register: _post_firmware_status
-          until: _post_firmware_status.json.product_version | default('unknown') == firmware_new_version
+          until: _post_firmware_status.json['product_' ~ firmware_target_kind] | default('unknown') == firmware_target_value
           retries: 240
           delay: 15
 
