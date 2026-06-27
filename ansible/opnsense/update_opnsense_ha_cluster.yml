@@ -57,15 +57,20 @@
             firmware_status: "{{ _firmware_status.json.status }}"
             firmware_current_version: "{{ _firmware_status.json.product.product_version | default('unknown') }}"
             firmware_product_series: "{{ _firmware_status.json.product.product_series | default('unknown') }}"
-            firmware_new_version: "{{ _firmware_status.json.upgrade_packages | selectattr('name', 'equalto', 'opnsense') | map(attribute='new_version') | first | default('') }}"
+            firmware_update_version: "{{ _firmware_status.json.upgrade_packages | selectattr('name', 'equalto', 'opnsense') | map(attribute='new_version') | first | default('') }}"
             firmware_upgrade_version: "{{ _firmware_status.json.upgrade_major_version | default('unknown') }}"
             firmware_upgrade_message: "{{ _firmware_status.json.upgrade_major_message | regex_replace('<[^>]+>', ' ') | regex_replace('\\s{2,}', ' ') | trim | default('') }}"
-            firmware_target_kind: "{{ 'series' if _firmware_status.json.status == 'upgrade' else 'version' }}"
-            firmware_target_value: "{{ firmware_upgrade_version if _firmware_status.json.status == 'upgrade' else firmware_new_version }}"
-            needs_reboot: "{{ (_firmware_status.json.upgrade_needs_reboot if opnsense_action == 'upgrade' else _firmware_status.json.needs_reboot) == '1' }}"
+            update_needs_reboot: "{{ _firmware_status.json.needs_reboot == '1' }}"
+            upgrade_needs_reboot: "{{ _firmware_status.json.upgrade_needs_reboot == '1' }}"
             total_vips: "{{ _vip_status.json.rowCount }}"
             mismatched_vips: "{{ _vip_status.json.rows | rejectattr('status', 'equalto', main_role) | list | length }}"
             in_maintenance: "{{ _vip_status.json.carp.maintenancemode }}"
+
+        - name: Resolve update-vs-upgrade specifics
+          ansible.builtin.set_fact:
+            needs_reboot: "{{ upgrade_needs_reboot if firmware_status == 'upgrade' else update_needs_reboot }}"
+            firmware_target_kind: "{{ 'series' if firmware_status == 'upgrade' else 'version' }}"
+            firmware_target_value: "{{ firmware_upgrade_version if firmware_status == 'upgrade' else firmware_update_version }}"
 
         - name: Skip backup {{ firmware_action }}
           ansible.builtin.set_fact:
@@ -230,7 +235,7 @@
             force_basic_auth: true
             body: |
               Current version: {{ firmware_current_version }}
-              {{ firmware_action | capitalize }} to {{ firmware_new_version }} failed on {{ inventory_hostname }} ({{ main_role }}).
+              {{ firmware_action | capitalize }} to {{ firmware_update_version }} failed on {{ inventory_hostname }} ({{ main_role }}).
               No snapshot have been taken before the {{ firmware_action }}.
             headers:
               Title: "OPNsense {{ firmware_action }} failed on {{ inventory_hostname }}"
@@ -258,7 +263,7 @@
             vmid: "{{ proxmox_vmid }}"
             state: present
             snapname: "{{ proxmox_snap_name }}"
-            description: "Pre-firmware-{{ firmware_action }}: {{ firmware_current_version }} → {{ firmware_new_version }}"
+            description: "Pre-firmware-{{ firmware_action }}: {{ firmware_current_version }} → {{ firmware_update_version }}"
 
         - name: Enable CARP maintenance mode
           ansible.builtin.uri:
@@ -365,7 +370,7 @@
             force_basic_auth: true
             body: |
               Current version: {{ firmware_current_version }}
-              {{ firmware_action | capitalize }} to {{ firmware_new_version }} failed on {{ inventory_hostname }} ({{ main_role }}).
+              {{ firmware_action | capitalize }} to {{ firmware_update_version }} failed on {{ inventory_hostname }} ({{ main_role }}).
               # {% if }
               A snapshot have been taken before the {{ firmware_action }} and the VM has been rollback.
             headers:
@@ -398,7 +403,7 @@
           OPNsense HA cluster {{ firmware_action }} completed successfully.
           {% for host in [master, backup] %}
           {% set h = hostvars[host] %}
-          {{ h.main_role }} ({{ host }}): {% if h.skip_update %}already on {{ h.firmware_current_version }}, skipped{% else %}{{ h.firmware_current_version }} → {{ h.firmware_new_version }}{% endif %}{{ "\n" if not loop.last else "" }}
+          {{ h.main_role }} ({{ host }}): {% if h.skip_update %}already on {{ h.firmware_current_version }}, skipped{% else %}{{ h.firmware_current_version }} → {{ h.firmware_update_version }}{% endif %}{{ "\n" if not loop.last else "" }}
           {% endfor %}
         headers:
           Title: "OPNsense {{ firmware_action }} completed"
