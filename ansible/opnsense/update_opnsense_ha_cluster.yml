@@ -313,7 +313,7 @@
             host: "{{ ansible_host }}"
             port: "{{ opnsense_https_port }}"
             state: started
-            timeout: 300
+            timeout: 900
             delay: 30
           when: needs_reboot
 
@@ -371,7 +371,6 @@
             body: |
               Current version: {{ firmware_current_version }}
               {{ firmware_action | capitalize }} to {{ firmware_update_version }} failed on {{ inventory_hostname }} ({{ main_role }}).
-              # {% if }
               A snapshot have been taken before the {{ firmware_action }} and the VM has been rollback.
             headers:
               Title: "OPNsense {{ firmware_action }} failed on {{ inventory_hostname }}"
