@@ -199,7 +199,7 @@
             force_basic_auth: true
             validate_certs: false
           register: _post_firmware_status
-          until: _post_firmware_status.json['product_' ~ firmware_target_kind] | default('unknown') == firmware_target_value
+          until: _post_firmware_status.json.product['product_' ~ firmware_target_kind] | default('unknown') == firmware_target_value
           retries: 240
           delay: 15
 
@@ -326,8 +326,8 @@
             force_basic_auth: true
             validate_certs: false
           register: _post_firmware_status
-          until: _post_firmware_status.json['product_' ~ firmware_target_kind] | default('unknown') == firmware_target_value
-          retries: 240
+          until: _post_firmware_status.json.product['product_' ~ firmware_target_kind] | default('unknown') == firmware_target_value
+          retries: 2t40
           delay: 15
 
         - name: Check VIP status 
