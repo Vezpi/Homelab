@@ -186,7 +186,7 @@
             host: "{{ ansible_host }}"
             port: "{{ opnsense_https_port }}"
             state: started
-            timeout: 3600
+            timeout: 5400
             delay: 30
           when: needs_reboot
 
@@ -313,7 +313,7 @@
             host: "{{ ansible_host }}"
             port: "{{ opnsense_https_port }}"
             state: started
-            timeout: 3600
+            timeout: 5400
             delay: 30
           when: needs_reboot
 
