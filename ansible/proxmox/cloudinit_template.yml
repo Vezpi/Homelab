@@ -88,7 +88,6 @@
             --machine q35
             --efidisk0 {{ vm_storage }}:0,pre-enrolled-keys=0
             --name {{ template_name }}
-          changed_when: true
  
         - name: Import the cloud image as the primary disk
           ansible.builtin.command: qm set {{ template_vmid }} --scsi0 {{ vm_storage }}:0,import-from={{ image_dest }}
@@ -105,3 +104,17 @@
         - name: Convert the VM to a template
           ansible.builtin.command: qm template {{ template_vmid }}
 
+        - name: Send notification
+          ansible.builtin.uri:
+            url: "{{  ntfy_url }}/{{ ntfy_topic }}"
+            method: POST
+            user: "{{ ntfy_user }}"
+            password: "{{ lookup('env', 'NTFY_PASSWORD') }}"
+            force_basic_auth: true
+            body: |
+              The {{ template_os | capitalize }} {{ os_release }} cloud-init template has been successfully updated on {{ inventory_hostname }}.
+            headers:
+              Title: "Cloud-init template updated"
+              Priority: "min"
+              Tags: "white_check_mark"
+          when: ntfy_url is defined
