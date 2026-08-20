@@ -1,0 +1,107 @@
+---
+- name: Create or update a cloud-init Ubuntu template
+  hosts: nodes
+  become: true
+  vars:
+    template_vmid: 900
+    template_os: ubuntu
+    os_release: noble
+
+    template_name: "{{template_os}}-{{ os_release }}-cloud"
+ 
+    image_filename: "{{ os_release }}-server-cloudimg-amd64.img"
+    image_url: "https://cloud-images.ubuntu.com/{{ os_release }}/current/{{ image_filename }}"
+    image_dest: "/var/lib/vz/template/iso/{{ image_filename }}"
+ 
+    iso_storage: local
+    vm_storage: ceph-workload
+ 
+    template_memory: 2048
+    template_cores: 1
+ 
+  tasks:
+    - name: Check whether the template VMID already exists
+      ansible.builtin.command: qm status {{ template_vmid }}
+      register: template_status
+      changed_when: false
+      failed_when: false
+
+    - name: Check if the cloud image file exists
+      ansible.builtin.stat:
+        path: "{{ image_dest }}"
+      register: image_exists
+      changed_when: false
+      failed_when: false
+
+    - name: Set candidate information
+      ansible.builtin.set_fact:
+        has_image_file: "{{ image_exists.stat.exists }}"
+        root_free_space: "{{ (ansible_facts['mounts'] | selectattr('mount', 'equalto', '/') | first).size_available }}"
+
+    - name: Select target host
+      ansible.builtin.set_fact:
+        target_host: >-
+          {{ (ansible_play_hosts
+              | map('extract', hostvars)
+              | selectattr('has_image_file', 'equalto', true)
+              | sort(attribute='root_free_space', reverse=true)
+              | map(attribute='inventory_hostname')
+              | first)
+              | default(ansible_play_hosts
+              | map('extract', hostvars)
+              | sort(attribute='root_free_space', reverse=true)
+              | map(attribute='inventory_hostname')
+              | first,
+              true) }}
+      run_once: true
+
+    - name: Download the current Ubuntu cloud image
+      ansible.builtin.get_url:
+        url: "{{ image_url }}"
+        dest: "{{ image_dest }}"
+        force: false 
+        mode: "0644"
+      register: image_download
+      when: inventory_hostname == target_host
+
+    - name: Destroy existing template if present
+      ansible.builtin.command: qm destroy {{ template_vmid }} --purge
+      when: 
+        - template_status.rc == 0
+        - image_download.changed
+ 
+    - name: Rebuild the template
+      when: 
+        - inventory_hostname == target_host
+        - image_download.changed or 
+          template_status.rc != 0
+      block:
+ 
+        - name: Create the base VM shell
+          ansible.builtin.command: >
+            qm create {{ template_vmid }}
+            --memory {{ template_memory }}
+            --core {{ template_cores }}
+            --net0 virtio,bridge=vmbr0
+            --scsihw virtio-scsi-pci
+            --bios ovmf
+            --machine q35
+            --efidisk0 {{ vm_storage }}:0,pre-enrolled-keys=0
+            --name {{ template_name }}
+          changed_when: true
+ 
+        - name: Import the cloud image as the primary disk
+          ansible.builtin.command: qm set {{ template_vmid }} --scsi0 {{ vm_storage }}:0,import-from={{ image_dest }}
+ 
+        - name: Attach a cloud-init drive
+          ansible.builtin.command: qm set {{ template_vmid }} --scsi1 {{ vm_storage }}:cloudinit
+ 
+        - name: Set boot order to the primary disk
+          ansible.builtin.command: qm set {{ template_vmid }} --boot order=scsi0
+ 
+        - name: Add serial console for cloud-init consoles
+          ansible.builtin.command: qm set {{ template_vmid }} --serial0 socket --vga serial0
+ 
+        - name: Convert the VM to a template
+          ansible.builtin.command: qm template {{ template_vmid }}
+
