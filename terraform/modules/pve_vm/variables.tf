@@ -12,7 +12,7 @@ variable "node_datastore" {
 variable "vm_template" {
   description = "Template of the VM"
   type        = string
-  default     = "ubuntu-cloud"
+  default     = "ubuntu-noble-cloud"
 }
 
 variable "vm_name" {

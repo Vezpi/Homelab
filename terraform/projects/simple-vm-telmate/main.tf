@@ -6,7 +6,7 @@ resource "proxmox_vm_qemu" "cloudinit-test" {
 
   target_node = "zenith"
 
-  clone = "ubuntu-cloud"
+  clone = "ubuntu-noble-cloud"
 
   agent = 0
 
