@@ -1,0 +1,432 @@
+---
+# OPNsense HA Cluster Update
+# Order: backup (TrueNAS) first, then master (Proxmox)
+###############################################################
+- name: "Phase 1 | Firmware check on all nodes"
+  hosts: opnsense
+  any_errors_fatal: true
+  gather_facts: false
+  tasks:
+
+    - block:
+
+        - name: Check node availability
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/system/status"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+
+        - name: Trigger firmware check
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/firmware/check"
+            method: POST
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+
+        - name: Check VIP status 
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/diagnostics/interface/get_vip_status"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _vip_status
+
+        - name: Wait for check to complete
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/firmware/status"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _firmware_status 
+          until: _firmware_status.json.status_msg != "Firmware status requires to check for update first to provide more information."
+          retries: 10
+          delay: 2
+
+        - name: Store node facts
+          ansible.builtin.set_fact:
+            firmware_action: "{{ opnsense_action | default('update')}}"
+            firmware_status: "{{ _firmware_status.json.status }}"
+            firmware_status_msg: "{{ _firmware_status.json.status_msg }}"
+            firmware_current_version: "{{ _firmware_status.json.product.product_version | default('unknown') }}"
+            firmware_product_series: "{{ _firmware_status.json.product.product_series | default('unknown') }}"
+            firmware_update_version: "{{ _firmware_status.json.upgrade_packages | selectattr('name', 'equalto', 'opnsense') | map(attribute='new_version') | first | default('') }}"
+            firmware_upgrade_version: "{{ _firmware_status.json.upgrade_major_version | default('unknown') }}"
+            firmware_upgrade_message: "{{ _firmware_status.json.upgrade_major_message | regex_replace('<[^>]+>', ' ') | regex_replace('\\s{2,}', ' ') | trim | default('') }}"
+            firmware_up_to_date: "{{ _firmware_status.json.status_msg == 'There are no updates available on the selected mirror.' }}"                   
+            needs_reboot: "{{ (_firmware_status.json.upgrade_needs_reboot == '1') if _firmware_status.json.status == 'upgrade' else (_firmware_status.json.needs_reboot == '1') }}"
+            total_vips: "{{ _vip_status.json.rowCount }}"
+            mismatched_vips: "{{ _vip_status.json.rows | rejectattr('status', 'equalto', main_role) | list | length }}"
+            in_maintenance: "{{ _vip_status.json.carp.maintenancemode }}"
+
+        - name: Resolve update-vs-upgrade specifics
+          ansible.builtin.set_fact:
+            firmware_target_kind: "{{ 'series' if firmware_status == 'upgrade' else 'version' }}"
+            firmware_target_value: "{{ firmware_upgrade_version if firmware_status == 'upgrade' else firmware_update_version }}"
+
+        - name: Backup already updated
+          ansible.builtin.set_fact:
+            skip_update: true
+            firmware_status: "skipped"
+          delegate_to: "{{ groups['opnsense_backup'][0] }}"
+          delegate_facts: true
+          run_once: true
+          when: >-
+            (hostvars[groups['opnsense_backup'][0]].firmware_current_version
+            if hostvars[groups['opnsense_master'][0]].firmware_target_kind == 'version'
+            else hostvars[groups['opnsense_backup'][0]].firmware_product_series)
+            == hostvars[groups['opnsense_master'][0]].firmware_target_value
+
+        - name: Skip node {{ firmware_action }}
+          ansible.builtin.set_fact:
+            skip_update: true
+            firmware_status: "skipped"
+          when: firmware_up_to_date or firmware_action != firmware_status
+        
+        - name: "Assert"
+          ansible.builtin.assert:
+            that: 
+              - not in_maintenance
+              - mismatched_vips == 0
+              - total_vips > 0
+            quiet: true
+
+      rescue:
+
+        - name: Send Ntfy notification
+          ansible.builtin.uri:
+            url: "{{  ntfy_url }}/{{ ntfy_topic }}"
+            method: POST
+            user: "{{ ntfy_user }}"
+            password: "{{ lookup('env', 'NTFY_PASSWORD') }}"
+            force_basic_auth: true
+            body: |
+              Current version: {{ firmware_current_version }}
+              {% if in_maintenance %}
+              The node {{ inventory_hostname }} is in CARP maintenance mode.
+              {% elif mismatched_vips > 0 %}
+              Some VIP are not {{ main_role }} on {{ ansible_host }}.
+              {% elif total_vips == 0 %}
+              No VIPs are managed.
+              {% else %}
+              An error occured during the {{ firmware_action }}.
+              {% endif %}
+            headers:
+              Title: "OPNsense {{ firmware_action }} report"
+              Priority: "default"
+              Tags: "x"
+          when: ntfy_url is defined
+
+        - ansible.builtin.fail:
+            msg: "Update aborted"
+
+
+- name: "Phase 2 | Update backup node (TrueNAS, no snapshot)"
+  hosts: opnsense_backup
+  any_errors_fatal: true
+  gather_facts: false
+  tasks:
+
+    - when: not skip_update | default(false)
+      block:
+
+        - name: Enable CARP maintenance mode
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/diagnostics/interface/carp_status/maintenance"
+            method: POST
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _enable_maintenance
+          changed_when: _enable_maintenance.status == "ok"
+
+        - name: Trigger firmware {{ firmware_action }}
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/firmware/{{ firmware_action }}"
+            method: POST
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+
+        - name: Check if the {{ firmware_action }} is running
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/firmware/running"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _update_running
+          until: _update_running.json.status == 'busy'
+          retries: 2
+          delay: 2
+
+        - name: Wait for node to reboot after the {{ firmware_action }}
+          ansible.builtin.wait_for:
+            host: "{{ ansible_host }}"
+            port: "{{ opnsense_https_port }}"
+            state: stopped
+            timeout: 3600
+          when: needs_reboot
+
+        - name: Wait for node to come back online
+          ansible.builtin.wait_for:
+            host: "{{ ansible_host }}"
+            port: "{{ opnsense_https_port }}"
+            state: started
+            timeout: 5400
+            delay: 30
+          when: needs_reboot
+
+        - name: Check firmware version
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/firmware/status"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _post_firmware_status
+          until: _post_firmware_status.json.product['product_' ~ firmware_target_kind] | default('unknown') == firmware_target_value
+          retries: 240
+          delay: 15
+
+        - name: Check VIP status 
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/diagnostics/interface/get_vip_status"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _carp_post_udapte
+
+        - name: Disable CARP maintenance mode
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/diagnostics/interface/carp_status/maintenance"
+            method: POST
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          when: _carp_post_udapte.json.carp.maintenancemode
+          ignore_errors: true
+
+      rescue:
+
+        - name: Send Ntfy notification
+          ansible.builtin.uri:
+            url: "{{  ntfy_url }}/{{ ntfy_topic }}"
+            method: POST
+            user: "{{ ntfy_user }}"
+            password: "{{ lookup('env', 'NTFY_PASSWORD') }}"
+            force_basic_auth: true
+            body: |
+              Current version: {{ firmware_current_version }}
+              {{ firmware_action | capitalize }} to {{ firmware_target_value }} failed on {{ inventory_hostname }} ({{ main_role }}).
+              No snapshot have been taken before the {{ firmware_action }}.
+            headers:
+              Title: "OPNsense {{ firmware_action }} failed on {{ inventory_hostname }}"
+              Priority: "high"
+              Tags: "x"
+          when: ntfy_url is defined
+
+        - ansible.builtin.fail:
+            msg: "Update failed"
+
+- name: "Phase 3 | Update master node (Proxmox, with snapshot)"
+  hosts: opnsense_master
+  any_errors_fatal: true
+  gather_facts: false
+  vars:
+    proxmox_snap_name: "preupdate-{{ now().strftime('%Y%m%d') }}"
+
+  tasks:
+
+    - when: not skip_update | default(false)
+      block:
+
+        - name: Take Proxmox VM snapshot
+          community.proxmox.proxmox_snap:
+            vmid: "{{ proxmox_vmid }}"
+            state: present
+            snapname: "{{ proxmox_snap_name }}"
+            description: "Pre-firmware-{{ firmware_action }}: {{ firmware_current_version }} → {{ firmware_target_value }}"
+
+        - name: Enable CARP maintenance mode
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/diagnostics/interface/carp_status/maintenance"
+            method: POST
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _enable_maintenance
+          changed_when: _enable_maintenance.status == "ok"
+
+        - name: Wait for CARP failover to settle
+          ansible.builtin.pause:
+            seconds: 5
+
+        - name: Trigger firmware {{ firmware_action }}
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/firmware/{{ firmware_action }}"
+            method: POST
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+
+        - name: Check if the {{ firmware_action }} is running
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/firmware/running"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _update_running
+          until: _update_running.json.status == 'busy'
+          retries: 2
+          delay: 2
+
+        - name: Wait for node to reboot after the {{ firmware_action }}
+          ansible.builtin.wait_for:
+            host: "{{ ansible_host }}"
+            port: "{{ opnsense_https_port }}"
+            state: stopped
+            timeout: 3600
+          when: needs_reboot
+
+        - name: Wait for node to come back online
+          ansible.builtin.wait_for:
+            host: "{{ ansible_host }}"
+            port: "{{ opnsense_https_port }}"
+            state: started
+            timeout: 5400
+            delay: 30
+          when: needs_reboot
+
+        - name: Check firmware version
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/core/firmware/status"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _post_firmware_status
+          until: _post_firmware_status.json.product['product_' ~ firmware_target_kind] | default('unknown') == firmware_target_value
+          retries: 240
+          delay: 15
+
+        - name: Check VIP status 
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/diagnostics/interface/get_vip_status"
+            method: GET
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _carp_post_udapte
+
+        - name: Disable CARP maintenance mode
+          ansible.builtin.uri:
+            url: "https://{{ opnsense_host }}/api/diagnostics/interface/carp_status/maintenance"
+            method: POST
+            user: "{{ opnsense_api_key }}"
+            password: "{{ opnsense_api_secret }}"
+            force_basic_auth: true
+            validate_certs: false
+          when: _carp_post_udapte.json.carp.maintenancemode
+          ignore_errors: true
+
+      rescue:
+
+        - name: Rollback VM to the pre-{{ firmware_action }} snapshot
+          community.proxmox.proxmox_snap:
+            vmid: "{{ proxmox_vmid }}"
+            state: rollback
+            snapname: "{{ proxmox_snap_name }}"
+          register: _proxmox_snapshot_rollback
+          ignore_errors: true
+
+        - name: Send Ntfy notification
+          ansible.builtin.uri:
+            url: "{{  ntfy_url }}/{{ ntfy_topic }}"
+            method: POST
+            user: "{{ ntfy_user }}"
+            password: "{{ lookup('env', 'NTFY_PASSWORD') }}"
+            force_basic_auth: true
+            body: |
+              Current version: {{ firmware_current_version }}
+              {{ firmware_action | capitalize }} to {{ firmware_target_value }} failed on {{ inventory_hostname }} ({{ main_role }}).
+              A snapshot have been taken before the {{ firmware_action }} and the VM has been rollback.
+            headers:
+              Title: "OPNsense {{ firmware_action }} failed on {{ inventory_hostname }}"
+              Priority: "high"
+              Tags: "x"
+          when: ntfy_url is defined
+
+        - ansible.builtin.fail:
+            msg: "Update aborted"
+
+
+- name: "Phase 4 | Notification"
+  hosts: localhost
+  gather_facts: false
+  tasks:
+
+    - name: Send Ntfy notification
+      vars:
+        master: "{{ groups['opnsense_master'][0] }}"
+        backup: "{{ groups['opnsense_backup'][0] }}"
+        m: "{{ hostvars[master] }}"
+        b: "{{ hostvars[backup] }}"
+        same_operation: "{{ m.firmware_status == b.firmware_status }}"
+
+      ansible.builtin.uri:
+        url: "{{ ntfy_url }}/{{ ntfy_topic }}"
+        method: POST
+        user: "{{ ntfy_user }}"
+        password: "{{ lookup('env', 'NTFY_PASSWORD') }}"
+        force_basic_auth: true
+        body: |
+          {% if same_operation %}
+          {% if m.skip_update | default(false) %}
+          Both nodes already on {{ m.firmware_current_version }}, no action taken.
+          {% else %}
+          OPNsense cluster: {{ m.firmware_current_version }} → {{ m.firmware_target_value }} ({{ m.firmware_status }})
+          {% endif %}
+          {% else %}
+          {% if m.skip_update | default(false) %}
+          MASTER ({{ master }}): already on {{ m.firmware_current_version }}, no action taken.
+          {% else %}
+          MASTER ({{ master }}): {{ m.firmware_current_version }} → {{ m.firmware_target_value }} ({{ m.firmware_status }})
+          {% endif %}
+          {% if b.skip_update | default(false) %}
+          BACKUP ({{ backup }}): already on {{ b.firmware_current_version }}, no action taken.
+          {% else %}
+          BACKUP ({{ backup }}): {{ b.firmware_current_version }} → {{ b.firmware_target_value }} ({{ b.firmware_status }})
+          {% endif %}
+          {% endif %}
+        headers:
+          Title: >-
+            {%- if m.skip_update | default(false) and b.skip_update | default(false) -%}
+            OPNsense cluster - no {{m.firmware_action }} available
+            {%- else -%}
+            OPNsense cluster {{m.firmware_action }} completed
+            {%- endif -%}
+          Priority: "{{ 'min' if (m.skip_update | default(false) and b.skip_update | default(false)) else 'default' }}"
+          Tags: "{{ 'information_source' if (m.skip_update | default(false) and b.skip_update | default(false)) else 'white_check_mark' }}"
+      when: ntfy_url is defined

@@ -84,7 +84,7 @@ if ($type === "MASTER") {
         write_config("disable interface '$ifkey' due CARP event '$type'", false);
         interface_configure(false, $ifkey, false, false);
         // Remove WAN default gateway
-        mwexec("/sbin/route delete default");
+        mwexecf("/sbin/route delete default");
         foreach ($config['OPNsense']['Gateways']['gateway_item'] as $gw) {
             if ($gw['name'] === $gw_name) {
                 $gw_ip = $gw['gateway'];
@@ -92,9 +92,9 @@ if ($type === "MASTER") {
             }
         }
         // Shutdown WAN interface
-        mwexec("/sbin/ifconfig {$real_if} down")
+        mwexecf("/sbin/ifconfig {$real_if} down")
         // Add fallback default gateway
-        mwexec("/sbin/route add default {$gw_ip}");
+        mwexecf("/sbin/route add default {$gw_ip}");
         // Create lock file
         file_put_contents($lock_file, time());
         sleep($lock_default_age);
