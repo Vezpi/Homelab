@@ -1,0 +1,6 @@
+---
+- name: Prepare Kubernetes nodes
+  hosts: all
+
+  roles:
+    - role: k8s_node

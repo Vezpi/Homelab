@@ -1,0 +1,36 @@
+---
+- name: Install prerequisite packages
+  ansible.builtin.apt:
+    name: "{{ k8s_prerequisite_packages }}"
+    state: present
+    update_cache: true
+  become: yes
+
+- name: Add Kubernetes apt key
+  ansible.builtin.apt_key:
+    url: "{{ k8s_repo_key }}"
+    keyring: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    state: present
+  become: yes
+
+- name: Add Kubernetes apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] {{ k8s_repo }} /"
+    state: present
+    filename: kubernetes
+  become: yes
+
+- name: Install kubelet and kubeadm
+  ansible.builtin.apt:
+    name: "{{ k8s_packages }}"
+    state: present
+    update_cache: true
+  become: yes
+
+- name: Hold kubelet and kubeadm packages
+  ansible.builtin.command:
+    cmd: apt-mark hold {{ item }}
+  loop: "{{ k8s_packages }}"
+  register: _kube_hold
+  become: yes
+  changed_when: "'already set on hold' not in _kube_hold.stdout"

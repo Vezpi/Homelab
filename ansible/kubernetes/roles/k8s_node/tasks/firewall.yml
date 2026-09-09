@@ -1,0 +1,44 @@
+---
+- name: Allow SSH from admin subnet
+  community.general.ufw:
+    rule: allow
+    port: "{{ k8s_firewall_ssh_port }}"
+    proto: tcp
+    from_ip: "{{ k8s_firewall_admin_subnet }}"
+  become: yes
+
+- name: Allow common Kubernetes ports from admin subnet
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+    from_ip: "{{ k8s_firewall_admin_subnet }}"
+  become: yes
+  loop: "{{ k8s_firewall_common_ports }}"
+
+- name: Allow etcd and control plane ports on control-plane nodes
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+    from_ip: "{{ k8s_firewall_admin_subnet }}"
+  become: yes
+  loop: "{{ k8s_firewall_master_ports }}"
+  when: inventory_hostname in groups['master']
+
+- name: Allow kube-proxy and NodePort ports on worker nodes
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+    from_ip: "{{ k8s_firewall_admin_subnet }}"
+  become: yes
+  loop: "{{ k8s_firewall_worker_ports }}"
+  when: inventory_hostname in groups['worker']
+
+- name: Enable ufw and deny incoming by default
+  community.general.ufw:
+    state: enabled
+    policy: deny
+    direction: incoming
+  become: yes

@@ -1,0 +1,28 @@
+---
+k8s_version: "1.37"
+
+k8s_repo: "https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb"
+k8s_repo_key: "https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/Release.key"
+
+k8s_packages:
+  - kubelet
+  - kubeadm
+
+k8s_prerequisite_packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+
+k8s_firewall_admin_subnet: "192.168.66.0/24"
+k8s_firewall_ssh_port: "22"
+k8s_firewall_common_ports:
+  - "6443"
+  - "10250"
+k8s_firewall_master_ports:
+  - "2379:2380"
+  - "10257"
+  - "10259"
+k8s_firewall_worker_ports:
+  - "10256"
+  - "30000:32767"

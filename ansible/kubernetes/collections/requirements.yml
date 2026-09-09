@@ -1,3 +1,4 @@
 ---
 collections:
   - name: cloud.terraform
+  - name: community.general
