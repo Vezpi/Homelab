@@ -6,7 +6,7 @@ module "pve_vm" {
   vm_cpu    = each.value.vm_cpu
   vm_ram    = each.value.vm_ram
   vm_vlan   = each.value.vm_vlan
-  vm_tags   = var.vm_tags
+  vm_tags   = ["${var.vm_env}"]
 }
 
 locals {
@@ -21,7 +21,7 @@ locals {
   max_free_mib = length(local.node_stats) > 0 ? max([for node in local.node_stats : node.free_mib]...) : 0
 
   # Online nodes ordered by available memory, most available first (name as tie-break)
-  node_order = var.target_node != "" ? [var.target_node] : [
+  node_order = [
     for key in sort([
       for node in local.node_stats : "${format("%012d", local.max_free_mib - node.free_mib)}|${node.name}"
     ]) : split("|", key)[1]

@@ -9,10 +9,16 @@ variable "proxmox_api_token" {
   sensitive   = true
 }
 
-variable "target_node" {
-  description = "Node which hosts the VMs when set; otherwise a node is selected based on available resources"
+variable "proxmox_ssh_username" {
+  description = "Proxmox SSH username"
   type        = string
-  default     = ""
+  sensitive   = true
+}
+
+variable "proxmox_ssh_password" {
+  description = "Proxmox SSH password"
+  type        = string
+  sensitive   = true
 }
 
 variable "master_count" {
@@ -54,10 +60,4 @@ variable "vm_env" {
   description = "VM environment"
   type        = string
   default     = "prod"
-}
-
-variable "vm_tags" {
-  description = "Tags for the VM"
-  type        = list(any)
-  default     = ["prod"]
 }
