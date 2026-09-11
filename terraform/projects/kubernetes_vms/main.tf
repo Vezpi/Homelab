@@ -80,7 +80,7 @@ locals {
 
   master_placements = [
     for i in range(length(local.master_nodes)) : {
-      vm_name = "kub-${var.vm_env}-m${format("%02d", i + 1)}"
+      vm_name = "kub-${var.vm_env}-m${format("%01d", i + 1)}"
       vm_role = "master"
       vm_node = local.master_nodes[i]
     }
@@ -89,7 +89,7 @@ locals {
   worker_placements = flatten([
     for p in range(length(local.worker_precedence)) : [
       for k in range(local.worker_placed[p]) : {
-        vm_name = "kub-${var.vm_env}-w${format("%02d", local.worker_prefix[p] + k + 1)}"
+        vm_name = "kub-${var.vm_env}-w${format("%01d", local.worker_prefix[p] + k + 1)}"
         vm_role = "worker"
         vm_node = local.worker_precedence[p]
       }
