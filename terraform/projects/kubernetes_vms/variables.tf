@@ -22,32 +22,32 @@ variable "proxmox_ssh_password" {
 }
 
 variable "vm_attr" {
-  description = "VM attributes per role. max_per_node = 0 means unlimited VMs per node."
+  description = "VM attributes per role. The control-plane role (master) is placed one per node; other roles are packed without a per-node limit."
   type = map(object({
-    ram          = number
-    cpu          = number
-    vlan         = number
-    count        = number
-    max_per_node = number
+    ram   = number
+    cpu   = number
+    vlan  = number
+    count = number
   }))
   default = {
-    "master" = { ram = 2048, cpu = 2, vlan = 66, count = 3, max_per_node = 1 }
-    "worker" = { ram = 4096, cpu = 2, vlan = 66, count = 3, max_per_node = 0 }
+    "master" = { ram = 2048, cpu = 2, vlan = 66, count = 3 }
+    "worker" = { ram = 4096, cpu = 2, vlan = 66, count = 3 }
   }
 
   validation {
     condition     = alltrue([for v in values(var.vm_attr) : v.count >= 1])
     error_message = "Each role must deploy at least 1 VM."
   }
+}
+
+variable "master_count" {
+  description = "Master role VM count override. null keeps the vm_attr default."
+  type        = number
+  default     = null
 
   validation {
-    condition     = alltrue([for v in values(var.vm_attr) : v.max_per_node >= 0])
-    error_message = "max_per_node must be 0 (unlimited) or a positive number."
-  }
-
-  validation {
-    condition     = length([for v in values(var.vm_attr) : v if v.max_per_node == 1]) == 1
-    error_message = "Exactly one role must have max_per_node = 1 (the control-plane role)."
+    condition     = var.master_count == null || var.master_count >= 1
+    error_message = "master_count must be null or at least 1."
   }
 }
 
@@ -81,6 +81,17 @@ variable "master_vlan" {
   validation {
     condition     = var.master_vlan == null || var.master_vlan >= 1
     error_message = "master_vlan must be null or at least 1."
+  }
+}
+
+variable "worker_count" {
+  description = "Worker role VM count override. null keeps the vm_attr default."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.worker_count == null || var.worker_count >= 1
+    error_message = "worker_count must be null or at least 1."
   }
 }
 

@@ -32,15 +32,19 @@ locals {
   # Per-role simple overrides merged over vm_attr defaults (null keeps the default)
   role_overrides = {
     for role, cfg in var.vm_attr : role => lookup({
-      "master" = { ram = var.master_ram != null ? var.master_ram * 1024 : null, cpu = var.master_cpu, vlan = var.master_vlan }
-      "worker" = { ram = var.worker_ram != null ? var.worker_ram * 1024 : null, cpu = var.worker_cpu, vlan = var.worker_vlan }
+      "master" = { count = var.master_count, ram = var.master_ram != null ? var.master_ram * 1024 : null, cpu = var.master_cpu, vlan = var.master_vlan }
+      "worker" = { count = var.worker_count, ram = var.worker_ram != null ? var.worker_ram * 1024 : null, cpu = var.worker_cpu, vlan = var.worker_vlan }
     }, role, {})
   }
+
+  # Internal placement rule: the control-plane role (master) sits one per node, pack roles are unlimited
+  cp_role_name      = "master"
+  role_max_per_node = { for role, cfg in var.vm_attr : role => role == local.cp_role_name ? 1 : 0 }
 
   effective_vm_attr = {
     for role, cfg in var.vm_attr : role => merge(cfg, {
       for attr, value in local.role_overrides[role] : attr => value if value != null
-    })
+    }, { max_per_node = local.role_max_per_node[role] })
   }
 
   # Control plane (max_per_node = 1): one VM per node, only on nodes with enough free memory
