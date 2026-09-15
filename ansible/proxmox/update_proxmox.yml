@@ -103,7 +103,24 @@
               upgrade: full
               autoremove: true
               autoclean: true
-              
+
+          - name: Check whether Proxmox subscription nag is already patched
+            ansible.builtin.shell:
+              cmd: >
+                grep -Fq
+                'return (typeof orig_cmd === "function" && (orig_cmd(), true));'
+                /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
+            register: proxmox_nag_patch
+            changed_when: false
+            failed_when: false
+
+          - name: Patch Proxmox subscription nag
+            ansible.builtin.lineinfile:
+              path: /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
+              insertafter: 'checked_command: function (orig_cmd) {'
+              line: '            return (typeof orig_cmd === "function" && (orig_cmd(), true));'
+            when: proxmox_nag_patch.rc != 0
+
           - name: Disable Ceph rebalancing
             ansible.builtin.command: ceph osd set noout
 
