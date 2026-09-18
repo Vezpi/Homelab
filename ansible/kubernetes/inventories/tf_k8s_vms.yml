@@ -1,0 +1,4 @@
+---
+plugin: cloud.terraform.terraform_provider
+project_path:
+  - /tmp/semaphore/project_1/repository_1_template_7/terraform/projects/kubernetes_vms

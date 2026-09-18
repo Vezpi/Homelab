@@ -1,0 +1,5 @@
+---
+- name: Prepare Kubernetes nodes
+  hosts: all
+  tasks:
+    - ansible.builtin.ping:
