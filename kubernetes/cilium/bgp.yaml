@@ -1,22 +1,4 @@
 ---
-apiVersion: cilium.io/v2
-kind: CiliumBGPClusterConfig
-metadata:
-  name: bgp-opnsense
-spec:
-  nodeSelector:
-    matchLabels:
-      kubernetes.io/role: "worker"
-  bgpInstances:
-  - name: "bgp-cilium-peers"
-    localASN: 64513 # Cilium ASN
-    peers:
-    - name: "opnsense"
-      peerASN: 64512 # OPNsense ASN
-      peerAddress: 192.168.66.1  # OPNsense IP on the Lab network
-      peerConfigRef:
-        name: "bgp-cilium-peers"
----
 apiVersion: cilium.io/v2alpha1
 kind: CiliumBGPPeerConfig
 metadata:
@@ -34,6 +16,24 @@ spec:
       advertisements:
         matchLabels:
           advertise: "bgp"
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPClusterConfig
+metadata:
+  name: bgp-opnsense
+spec:
+  nodeSelector:
+    matchLabels:
+      kubernetes.io/role: "worker"
+  bgpInstances:
+  - name: "bgp-cilium-cluster"
+    localASN: 64513 # Cilium ASN
+    peers:
+    - name: "opnsense"
+      peerASN: 64512 # OPNsense ASN
+      peerAddress: 192.168.66.1  # OPNsense IP on the Lab network
+      peerConfigRef:
+        name: "bgp-cilium-peers"
 ---
 apiVersion: cilium.io/v2alpha1
 kind: CiliumBGPAdvertisement
