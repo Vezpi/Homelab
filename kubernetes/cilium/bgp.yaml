@@ -15,7 +15,7 @@ spec:
       peerASN: 64512 # OPNsense ASN
       peerAddress: 192.168.66.1  # OPNsense IP on the Lab network
       peerConfigRef:
-        name: "bgp-opnsense"
+        name: "bgp-cilium-peers"
 ---
 apiVersion: cilium.io/v2alpha1
 kind: CiliumBGPPeerConfig
