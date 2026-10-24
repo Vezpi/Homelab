@@ -1,0 +1,25 @@
+services:
+  duplicati:
+    image: duplicati/duplicati
+    container_name: duplicati
+    volumes:
+      - /appli/data/duplicati/data:/data
+      - /backups:/backups
+      - /restore:/restore
+      - /:/source:ro
+    hostname: ${URL}
+    environment:
+    - TZ=Europe/Paris
+    networks:
+      - web
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.duplicati.rule=Host(`${URL}`)
+    - traefik.http.routers.duplicati.entrypoints=https
+    - traefik.http.routers.duplicati.tls.certresolver=letsencrypt
+    - traefik.http.services.duplicati.loadbalancer.server.port=8200
+    restart: always
+
+networks:
+  web:
+    external: true

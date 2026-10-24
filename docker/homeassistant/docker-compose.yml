@@ -1,0 +1,198 @@
+services:
+  homeassistant:
+    image: homeassistant/home-assistant:2026.9
+    container_name: homeassistant_core
+    hostname: homeassistant_core
+    volumes:
+    - /appli/data/homeassistant/core/:/config
+    - /etc/localtime:/etc/localtime:ro
+    environment:
+    - TZ=Europe/Paris
+    networks:
+    - lan
+    - web
+    - backend
+    depends_on:
+    - postgres
+    - influxdb
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.homeassistant.rule=Host(`${URL_HASS}`)
+    - traefik.http.routers.homeassistant.entrypoints=https
+    - traefik.http.routers.homeassistant.tls.certresolver=letsencrypt
+    - traefik.http.services.homeassistant.loadbalancer.server.port=8123
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: homeassistant_postgres
+    volumes:
+    - /appli/data/homeassistant/postgres:/var/lib/postgresql/data
+    - /etc/localtime:/etc/localtime:ro
+    environment:
+    - TZ=Europe/Paris
+    - POSTGRES_DB=${POSTGRES_DB}
+    - POSTGRES_USER=${POSTGRES_USER}
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    networks:
+    - backend
+    restart: unless-stopped
+
+  influxdb:
+    image: influxdb:2-alpine
+    container_name: homeassistant_influxdb
+    volumes:
+    - /appli/data/homeassistant/influxdb/data:/var/lib/influxdb2
+    - /appli/data/homeassistant/influxdb/config/:/etc/influxdb2
+    environment:
+    - TZ=Europe/Paris
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    env_file: influxdb.env
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.homeassistant-influxdb.rule=Host(`${URL_INFLUXDB}`)
+    - traefik.http.routers.homeassistant-influxdb.entrypoints=https
+    - traefik.http.routers.homeassistant-influxdb.tls.certresolver=letsencrypt
+    - traefik.http.routers.homeassistant-influxdb.middlewares=local-only@file
+    - traefik.http.services.homeassistant-influxdb.loadbalancer.server.port=8086
+    networks:
+    - backend
+    - web
+    restart: unless-stopped
+
+#  grafana:
+#    image: grafana/grafana
+#    container_name: homeassistant_grafana
+#    depends_on: 
+#    - influxdb
+
+  mosquitto:
+    image: eclipse-mosquitto
+    container_name: homeassistant_mqtt
+    volumes:
+    - /appli/data/homeassistant/mosquitto/config:/mosquitto/config
+    - /appli/data/homeassistant/mosquitto/data:/mosquitto/data
+    - /appli/data/homeassistant/mosquitto/log:/mosquitto/log
+    environment:
+    - TZ=Europe/Paris
+    networks:
+    - backend
+    restart: unless-stopped
+
+  zigbee2mqtt:
+    image: koenkk/zigbee2mqtt
+    container_name: homeassistant_zigbee
+    volumes:
+    - /appli/data/homeassistant/zigbee2mqtt:/app/data
+    - /run/udev:/run/udev:ro
+    environment:
+    - TZ=Europe/Paris
+    #devices:
+    #- /dev/ttyUSB0:/dev/ttyACM0
+    networks:
+    - lan
+    - backend
+    - web
+    depends_on:
+    - mosquitto
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.homeassistant-zigbee2mqtt.rule=Host(`${URL_Z2M}`)
+    - traefik.http.routers.homeassistant-zigbee2mqtt.entrypoints=https
+    - traefik.http.routers.homeassistant-zigbee2mqtt.tls.certresolver=letsencrypt
+    - traefik.http.routers.homeassistant-zigbee2mqtt.middlewares=local-only@file
+    - traefik.http.services.homeassistant-zigbee2mqtt.loadbalancer.server.port=8080
+    restart: always
+
+  editor:
+    image: causticlab/hass-configurator-docker
+    container_name: homeassistant_editor
+    volumes:
+    - /appli/data/homeassistant/editor:/config
+    - /appli/data/homeassistant/core:/homeassistant_root
+    - /appli/docker/homeassistant/docker-compose.yml:/homeassistant_root/docker-compose.yml
+    networks:
+    - backend
+    - web
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.homeassistant-editor.rule=Host(`${URL_EDITOR}`)
+    - traefik.http.routers.homeassistant-editor.entrypoints=https
+    - traefik.http.routers.homeassistant-editor.tls.certresolver=letsencrypt
+    - traefik.http.routers.homeassistant-editor.middlewares=local-only@file
+    - traefik.http.services.homeassistant-editor.loadbalancer.server.port=3218
+    restart: unless-stopped
+
+#  mdns:
+#    image:  monstrenyatko/mdns-repeater
+#    container_name: homeassistant_mdns
+#    command: mdns-repeater-app -f -d enp51s0 br-9388867fe123 
+    #restart: unless-stopped
+    #network_mode: host
+
+  nodered:
+    image: nodered/node-red
+    container_name: homeassistant_nodered
+    volumes:
+    - /appli/data/homeassistant/nodered/data:/data
+    environment:
+    - TZ=Europe/Paris
+    depends_on:
+    - homeassistant
+    - mosquitto
+    networks:
+    - backend
+    - web
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.homeassistant-nodered.rule=Host(`${URL_NODERED}`)
+    - traefik.http.routers.homeassistant-nodered.entrypoints=https
+    - traefik.http.routers.homeassistant-nodered.tls.certresolver=letsencrypt
+    - traefik.http.routers.homeassistant-nodered.middlewares=local-only@file
+    - traefik.http.services.homeassistant-nodered.loadbalancer.server.port=1880
+    restart: unless-stopped
+
+  whisper:
+    image: rhasspy/wyoming-whisper
+    container_name: homeassistant_whisper
+    command: --model base-int8 --language fr
+    environment:
+      - TZ=Europe/Paris
+    volumes:
+      - /appli/data/homeassistant/whisper/data:/data
+    networks:
+      - backend
+    restart: unless-stopped
+
+  piper:
+    image: rhasspy/wyoming-piper
+    container_name: homeassistant_piper
+    command: --voice fr_FR-mls-medium
+    environment:
+      - TZ=Europe/Paris
+    volumes:
+      - /appli/data/homeassistant/piper/data:/data
+    networks:
+      - backend
+    restart: unless-stopped
+
+  # ollama:
+  #   image: ollama/ollama
+  #   container_name: homeassistant_ollama
+  #   environment:
+  #     - TZ=Europe/Paris
+  #   volumes:
+  #     - /appli/data/homeassistant/ollama/data:/root/.ollama
+  #   networks:
+  #     - backend
+  #   restart: unless-stopped
+
+networks:
+  backend:
+  lan:
+    external: true
+  web:
+    external: true

@@ -1,0 +1,23 @@
+version: '3'
+
+services:
+  vscode:
+    image: codercom/code-server
+    container_name: vscode
+    volumes:
+      - /appli/data/vscode/project:/home/coder/project
+    environment:
+      - TZ=Europe/Paris
+    networks:
+      - web
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.vscode.rule=Host(`${URL}`)
+    - traefik.http.routers.vscode.entrypoints=https
+    - traefik.http.routers.vscode.tls.certresolver=letsencrypt
+    - traefik.http.services.vscode.loadbalancer.server.port=8080
+    restart: always
+
+networks:
+  web:
+    external: true

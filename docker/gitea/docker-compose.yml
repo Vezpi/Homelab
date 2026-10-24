@@ -1,0 +1,78 @@
+services:
+  server:
+    image: gitea/gitea:1.27
+    container_name: gitea_server
+    restart: always
+    volumes:
+    - /appli/data/gitea/data:/data
+    environment:
+    - USER_UID=1000
+    - USER_GID=1000
+    - TZ=Europe/Paris
+    - DB_TYPE=postgres
+    - DB_HOST=db:5432
+    - DB_NAME=${DB_NAME}
+    - DB_USER=${DB_USER} 
+    - DB_PASSWD=${DB_PASSWD}
+    - GITEA__service__DISABLE_REGISTRATION=true
+    networks:
+    - web
+    - backend
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.gitea.rule=Host(`${URL}`)
+    - traefik.http.routers.gitea.entrypoints=https
+    - traefik.http.routers.gitea.tls.certresolver=letsencrypt
+    - traefik.http.services.gitea.loadbalancer.server.port=3000
+    depends_on:
+      - db
+
+  db:
+    image: postgres:12-alpine
+    container_name: gitea_db
+    volumes:
+      - /appli/data/gitea/db:/var/lib/postgresql/data
+    environment:
+     - POSTGRES_USER=${DB_USER}
+     - POSTGRES_PASSWORD=${DB_PASSWD}
+     - POSTGRES_DB=${DB_NAME}
+    networks:
+      - backend
+    restart: always
+
+  # webhook:
+  #   image: almir/webhook
+  #   container_name: gitea_webhook
+  #   command: -verbose -hooks=/etc/webhook/hooks.yaml -hotreload
+  #   volumes:
+  #     - /appli/data/gitea/webhook/hooks:/etc/webhook
+  #     - /appli/data/gitea/webhook/scripts:/scripts
+  #   environment:
+  #   - TZ=Europe/Paris
+  #   networks:
+  #     - backend
+  #   restart: always
+
+  runner:
+    image: gitea/act_runner:latest
+    container_name: gitea_runner
+    restart: always
+    environment:
+      - GITEA_INSTANCE_URL=https://${URL}
+      - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_REGISTRATION_TOKEN}
+      - GITEA_RUNNER_NAME=${GITEA_RUNNER_NAME}
+      - GITEA_RUNNER_LABELS=${GITEA_RUNNER_LABELS}
+      - CONFIG_FILE=/data/config.yml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /appli/data/gitea/runner:/data
+      - /appli:/appli
+    networks:
+      - backend
+    depends_on:
+      - server
+
+networks:
+  backend:
+  web:
+    external: true

@@ -1,0 +1,84 @@
+services:
+  blog_production:
+    image: vezpi-blog:latest
+    container_name: blog_production
+    environment:
+      - TZ=Europe/Paris
+      - URL=${URL_PROD}
+      - BRANCH=main
+    volumes:
+      - blog_production_hugo_resources:/hugo-resources
+    networks:
+      - web
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/ > /dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.blog.rule=Host(`${URL_PROD}`)
+      - traefik.http.routers.blog.entrypoints=https
+      - traefik.http.routers.blog.tls.certresolver=letsencrypt
+      - traefik.http.services.blog.loadbalancer.server.port=80
+    restart: always
+
+  blog_staging:
+    image: vezpi-blog:latest
+    container_name: blog_staging
+    environment:
+      - TZ=Europe/Paris
+      - URL=${URL_STAGING}
+      - BRANCH=preview
+    volumes:
+      - blog_staging_hugo_resources:/hugo-resources
+    networks:
+      - web
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/ > /dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.blog-staging.rule=Host(`${URL_STAGING}`)
+      - traefik.http.routers.blog-staging.entrypoints=https
+      - traefik.http.routers.blog-staging.tls.certresolver=letsencrypt
+      - traefik.http.services.blog-staging.loadbalancer.server.port=80
+    restart: always
+
+  blog_dev:
+    image: vezpi-blog:dev
+    container_name: blog_dev
+    environment:
+      - TZ=Europe/Paris
+      - URL=${URL_DEV}
+      - BRANCH=${BLOG_TEST_BRANCH:-preview}
+    volumes:
+      - blog_dev_hugo_resources:/hugo-resources
+    networks:
+      - web
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/ > /dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.blog-dev.rule=Host(`${URL_DEV}`)
+      - traefik.http.routers.blog-dev.entrypoints=https
+      - traefik.http.routers.blog-dev.tls.certresolver=letsencrypt
+      - traefik.http.services.blog-dev.loadbalancer.server.port=80
+    restart: always
+
+volumes:
+  blog_production_hugo_resources:
+  blog_staging_hugo_resources:
+  blog_dev_hugo_resources:
+
+networks:
+  web:
+    external: true

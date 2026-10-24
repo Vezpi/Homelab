@@ -1,0 +1,27 @@
+services:
+  jellyfin:
+    image: linuxserver/jellyfin
+    container_name: jellyfin
+    volumes:
+    - /appli/data/jellyfin/:/config
+    - /data/videos/Series:/data/tvshows
+    - /data/videos/Films:/data/movies
+    devices:
+    - /dev/dri:/dev/dri
+    environment:
+    - TZ=Europe/Paris
+    - PUID=3120
+    - PGID=3120
+    networks:
+    - web
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.jellyfin.rule=Host(`${URL}`)
+    - traefik.http.routers.jellyfin.entrypoints=https
+    - traefik.http.routers.jellyfin.tls.certresolver=letsencrypt
+    - traefik.http.services.jellyfin.loadbalancer.server.port=8096
+    restart: unless-stopped
+
+networks:
+  web:
+    external: true

@@ -1,0 +1,62 @@
+services:
+  phpipam-web:
+    image: phpipam/phpipam-www:latest
+    container_name: phpipam_web
+    environment:
+      - TZ=Europe/Paris
+      - IPAM_DATABASE_HOST=phpipam-mariadb
+      - IPAM_DATABASE_PASS=${IPAM_DATABASE_PASS}
+      - IPAM_DATABASE_WEBHOST=%
+      - IPAM_TRUST_X_FORWARDED=true
+    volumes:
+      - /appli/data/phpipam/logo:/phpipam/css/images/logo
+      - /appli/data/phpipam/ca:/usr/local/share/ca-certificates:ro
+    depends_on:
+      - phpipam-mariadb
+    networks:
+      - web
+      - backend
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.phpipam.rule=Host(`${URL}`)
+      - traefik.http.routers.phpipam.entrypoints=https
+      - traefik.http.routers.phpipam.tls.certresolver=letsencrypt
+      - traefik.http.services.phpipam.loadbalancer.server.port=80
+    restart: unless-stopped
+
+
+  phpipam-cron:
+    image: phpipam/phpipam-cron:latest
+    container_name: phpipam_cron
+    environment:
+      - TZ=Europe/Paris
+      - IPAM_DATABASE_HOST=phpipam-mariadb
+      - IPAM_DATABASE_PASS=${IPAM_DATABASE_PASS}
+      - SCAN_INTERVAL=1h
+    restart: unless-stopped
+    volumes:
+      - /appli/data/phpipam/ca:/usr/local/share/ca-certificates:ro
+    networks:
+      - lan
+      - backend
+    depends_on:
+      - phpipam-mariadb
+
+  phpipam-mariadb:
+    image: mariadb:latest
+    container_name: phpipam_db
+    environment:
+      - TZ=Europe/Paris
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - /appli/data/phpipam/db:/var/lib/mysql
+    networks:
+      - backend
+    restart: unless-stopped
+
+networks:
+  backend:
+  lan:
+    external: true
+  web:
+    external: true

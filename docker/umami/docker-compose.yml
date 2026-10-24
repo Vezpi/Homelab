@@ -1,0 +1,52 @@
+services:
+  umami:
+    image: ghcr.io/umami-software/umami:3
+    container_name: umami_server
+    environment:
+      - TZ=Europe/Paris
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@umami_db:5432/${POSTGRES_DB}
+      - DATABASE_TYPE=postgresql
+      - APP_SECRET=${APP_SECRET}
+      - IGNORE_IP=${IGNORE_IP}
+    networks:
+      - backend
+      - web
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.umami.rule=Host(`${URL}`)
+    - traefik.http.routers.umami.entrypoints=https
+    - traefik.http.routers.umami.tls.certresolver=letsencrypt
+    - traefik.http.services.umami.loadbalancer.server.port=3000
+    restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "curl http://localhost:3000/api/heartbeat"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      db:
+        condition: service_healthy
+    init: true
+
+  db:
+    image: postgres:15-alpine
+    container_name: umami_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - /appli/data/umami/:/var/lib/postgresql/data
+    networks:
+      - backend
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  backend:
+  web:
+    external: true

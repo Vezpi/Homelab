@@ -1,0 +1,40 @@
+services:
+  app:
+    image: traefik:3
+    container_name: traefik
+    environment:
+      - TZ=Europe/Paris
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /appli/data/traefik/files:/files
+      - /appli/data/traefik/certs/ca:/ca
+      - /appli/data/traefik/config/traefik.yml:/etc/traefik/traefik.yml
+      - /appli/data/traefik/config/users:/users
+      - /appli/data/traefik/acme.json:/acme.json
+    networks:
+      - web
+    labels:
+      - traefik.enable=true
+      # Dashboard
+      - traefik.http.routers.dashboard.rule=Host(`${URL}`)
+      - traefik.http.routers.dashboard.service=api@internal
+      - traefik.http.routers.dashboard.entrypoints=https
+      - traefik.http.routers.dashboard.tls=true
+      - traefik.http.routers.dashboard.tls.certresolver=letsencrypt
+      - traefik.http.routers.dashboard.middlewares=local-only@file
+      # Redirect HTTP to HTTPS
+      - traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)
+      - traefik.http.routers.http-catchall.entrypoints=http
+      - traefik.http.routers.http-catchall.middlewares=redirect-to-https
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+      # Dummy
+      - traefik.http.services.dummy-svc.loadbalancer.server.port=9999
+    restart: always
+
+networks:
+  web:
+    external: true
+

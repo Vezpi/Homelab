@@ -1,0 +1,92 @@
+services:
+  db:
+    image: mariadb:lts
+    container_name: nextcloud_db
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    volumes:
+      - /appli/data/nextcloud/db:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MARIADB_AUTO_UPGRADE=1
+    networks:
+      - backend
+    restart: always
+
+  redis:
+    image: redis:alpine
+    container_name: nextcloud_redis
+    networks:
+      - backend
+    restart: always
+
+  core:
+    build: ./core
+    container_name: nextcloud_core
+    volumes:
+      - /appli/data/nextcloud/data:/var/www/html
+      - /data/cloud/Documents:/mnt/data/Documents
+      - /data/cloud/Ebook:/mnt/data/Ebook
+      - /data/photo:/mnt/data/photo
+      - /data/video:/mnt/data/video
+      - /data/download:/mnt/data/download
+    environment:
+      - MYSQL_HOST=db
+      - REDIS_HOST=redis
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+    env_file:
+      - db.env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - backend
+    healthcheck:
+      test: 'sh -c "/healthcheck.sh"'
+      interval: 1m
+      timeout: 5s
+      retries: 1
+      start_period: 20s
+    restart: always
+
+  web:
+    build: ./web
+    container_name: nextcloud_web
+    volumes:
+      - /appli/data/nextcloud/data:/var/www/html:ro
+    depends_on:
+      - core
+    networks:
+      - web
+      - backend
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.nextcloud.rule=Host(`${URL}`)
+    - traefik.http.routers.nextcloud.entrypoints=https
+    - traefik.http.routers.nextcloud.tls.certresolver=letsencrypt
+    - traefik.http.services.nextcloud.loadbalancer.server.port=80
+    - traefik.http.middlewares.nextcloud.redirectregex.regex=/.well-known/(card|cal)dav
+    - traefik.http.middlewares.nextcloud.redirectregex.replacement=/remote.php/dav/
+    restart: always
+
+  cron:
+    image: nextcloud:31-fpm-alpine
+    container_name: nextcloud_cron
+    volumes:
+      - /appli/data/nextcloud/data:/var/www/html
+    entrypoint: /cron.sh
+    depends_on:
+      - db
+      - redis
+    networks:
+      - backend
+    restart: always
+
+networks:
+  backend:
+  web:
+    external: true

@@ -1,0 +1,21 @@
+services:
+  NAME:
+    image: IMAGE
+    container_name: NAME
+    volumes:
+      - /appli/data/NAME/:/
+    environment:
+      - TZ=Europe/Paris
+    networks:
+      - web
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.NAME.rule=Host(`${URL}`)
+    - traefik.http.routers.NAME.entrypoints=https
+    - traefik.http.routers.NAME.tls.certresolver=letsencrypt
+    - traefik.http.services.NAME.loadbalancer.server.port=PORT
+    restart: always
+
+networks:
+  web:
+    external: true

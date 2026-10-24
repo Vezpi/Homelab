@@ -1,0 +1,22 @@
+services:
+  stirling-pdf:
+    image: stirlingtools/stirling-pdf:latest
+    container_name: stirling-pdf
+    restart: unless-stopped
+    volumes:
+      - /appli/data/stirling-pdf:/configs
+    environment:
+      - TZ=Europe/Paris
+    networks:
+      - web
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.stirling.rule=Host(`${URL}`)
+      - traefik.http.routers.stirling.entrypoints=https
+      - traefik.http.routers.stirling.tls=true
+      - traefik.http.routers.stirling.tls.certresolver=letsencrypt
+      - traefik.http.services.stirling.loadbalancer.server.port=8080
+
+networks:
+  web:
+    external: true

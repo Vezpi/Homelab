@@ -1,0 +1,131 @@
+services:
+
+  sonarr:
+    image: linuxserver/sonarr
+    container_name: sonarr
+    environment:
+      - PUID=3120
+      - PGID=3120
+      - TZ=Europe/Paris
+    volumes:
+    - /appli/data/seedbox/sonarr:/config
+    - /data/videos/Series:/tv
+    - /data/downloads:/downloads
+    networks:
+    - web
+    - backend
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.sonarr.rule=Host(`${URL_SONARR}`)
+    - traefik.http.routers.sonarr.entrypoints=https
+    - traefik.http.routers.sonarr.tls.certresolver=letsencrypt
+    - traefik.http.services.sonarr.loadbalancer.server.port=8989
+    restart: unless-stopped
+
+  radarr:
+    image: linuxserver/radarr
+    container_name: radarr
+    environment:
+    - PUID=3120
+    - PGID=3120
+    - TZ=Europe/Paris
+    volumes:
+    - /appli/data/seedbox/radarr:/config
+    - /data/videos/Films:/movies
+    - /data/downloads:/downloads
+    networks:
+    - backend
+    - web
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.radarr.rule=Host(`${URL_RADARR}`)
+    - traefik.http.routers.radarr.entrypoints=https
+    - traefik.http.routers.radarr.tls.certresolver=letsencrypt
+    - traefik.http.services.radarr.loadbalancer.server.port=7878
+    restart: always
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+    - PUID=3120
+    - PGID=3120
+    - TZ=Europe/Paris
+    volumes:
+    - /appli/data/seedbox/prowlarr:/config
+    networks:
+    - backend
+    - web
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.prowlarr.rule=Host(`${URL_PROWLARR}`)
+    - traefik.http.routers.prowlarr.entrypoints=https
+    - traefik.http.routers.prowlarr.tls.certresolver=letsencrypt
+    - traefik.http.services.prowlarr.loadbalancer.server.port=9696
+    restart: unless-stopped
+
+  transmission:
+    image: linuxserver/transmission
+    container_name: transmission
+    environment:
+    - PUID=3120
+    - PGID=3120
+    - TZ=Europe/Paris
+    #- TRANSMISSION_WEB_HOME=/combustion-release/ #optional
+    - USER=${USER_TRANSMISSION} #optional
+    - PASS=${PASS_TRANSMISSION} #optional
+    volumes:
+    - /appli/data/seedbox/transmission:/config
+    - /data/downloads:/downloads
+    networks:
+    - backend
+    - web
+    ports:
+      - 51413:51413
+      - 51413:51413/udp
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.transmission.rule=Host(`${URL_TRANSMISSION}`)
+    - traefik.http.routers.transmission.entrypoints=https
+    - traefik.http.routers.transmission.tls.certresolver=letsencrypt
+    - traefik.http.services.transmission.loadbalancer.server.port=9091
+    restart: always
+
+  flaresolverr:
+    #image: ghcr.io/flaresolverr/flaresolverr:pr-1282
+    image: flaresolverr/flaresolverr
+    container_name: flaresolverr
+    environment:
+    - LOG_LEVEL=${LOG_LEVEL:-debug}
+    - LOG_HTML=${LOG_HTML:-false}
+    - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none}
+    - TZ=Europe/Paris
+    restart: unless-stopped
+    networks:
+    - backend
+
+  bazarr:
+    image: linuxserver/bazarr
+    container_name: bazarr
+    environment:
+    - PUID=3120
+    - PGID=3120
+    - TZ=Europe/Paris
+    volumes:
+    - /appli/data/seedbox/bazarr:/config
+    - /data/videos/Series:/tv
+    networks:
+    - backend
+    - web
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.bazarr.rule=Host(`${URL_BAZARR}`)
+    - traefik.http.routers.bazarr.entrypoints=https
+    - traefik.http.routers.bazarr.tls.certresolver=letsencrypt
+    - traefik.http.services.bazarr.loadbalancer.server.port=6767
+    restart: unless-stopped
+      
+networks:
+  backend:
+  web:
+    external: true
