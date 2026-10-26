@@ -50,7 +50,6 @@ services:
       nofile:
         soft: 65536
         hard: 65536
-    env_file: influxdb.env
     labels:
     - traefik.enable=true
     - traefik.http.routers.homeassistant-influxdb.rule=Host(`${URL_INFLUXDB}`)
