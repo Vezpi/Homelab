@@ -23,7 +23,7 @@ services:
     restart: always
 
   core:
-    build: ./core
+    image: nextcloud:32-fpm-alpine
     container_name: nextcloud_core
     volumes:
       - /appli/data/nextcloud/data:/var/www/html
@@ -43,12 +43,6 @@ services:
       - redis
     networks:
       - backend
-    healthcheck:
-      test: 'sh -c "/healthcheck.sh"'
-      interval: 1m
-      timeout: 5s
-      retries: 1
-      start_period: 20s
     restart: always
 
   web:
@@ -72,7 +66,7 @@ services:
     restart: always
 
   cron:
-    image: nextcloud:31-fpm-alpine
+    image: nextcloud:32-fpm-alpine
     container_name: nextcloud_cron
     volumes:
       - /appli/data/nextcloud/data:/var/www/html
