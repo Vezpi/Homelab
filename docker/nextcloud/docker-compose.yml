@@ -70,6 +70,17 @@ services:
     container_name: nextcloud_cron
     volumes:
       - /appli/data/nextcloud/data:/var/www/html
+      - /data/cloud/Documents:/mnt/data/Documents
+      - /data/cloud/Ebook:/mnt/data/Ebook
+      - /data/photo:/mnt/data/photo
+      - /data/video:/mnt/data/video
+      - /data/download:/mnt/data/download
+    environment:
+      - MYSQL_HOST=db
+      - REDIS_HOST=redis
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
     entrypoint: /cron.sh
     depends_on:
       - db
