@@ -1,6 +1,6 @@
 services:
   network_application:
-    image: lscr.io/linuxserver/unifi-network-application:10.6.106-ls146
+    image: lscr.io/linuxserver/unifi-network-application:10.6.109-ls152
     container_name: unifi_network_application
     depends_on:
       - db
