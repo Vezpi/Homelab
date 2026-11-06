@@ -1,0 +1,133 @@
+---
+- name: Clone and start one cloud-init VM
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    vm_cpu: 1
+    vm_ram_gib: 2
+    vm_disk_gib: 4
+    vm_vlan: vlan66
+    vm_ipconfig0: ip=dhcp
+  module_defaults:
+    group/community.proxmox.proxmox:
+      api_host: "{{ proxmox_api_host }}"
+      api_port: "{{ proxmox_api_port | default(8006) }}"
+      api_user: "{{ proxmox_api_token_id.split('!')[0] }}"
+      api_token_id: "{{ proxmox_api_token_id.split('!')[1] }}"
+      api_token_secret: "{{ proxmox_api_token_secret }}"
+      validate_certs: true
+  tasks:
+    - name: Validate inputs before using the API
+      ansible.builtin.assert:
+        that:
+          - proxmox_api_host is defined and proxmox_api_host | length > 0
+          - proxmox_node is defined and proxmox_node | length > 0
+          - vm_template_id is defined and vm_template_id | string is match('^[0-9]+$')
+          - vm_hostname is defined and vm_hostname is match('^[a-zA-Z0-9][a-zA-Z0-9.-]*$')
+          - vm_storage is defined and vm_storage | length > 0
+          - vm_vlan is defined and vm_vlan is match('^[a-zA-Z0-9_.-]+$')
+          - vm_user is defined and vm_user | length > 0
+          - vm_ssh_public_key is defined and vm_ssh_public_key | length > 0
+          - vm_cpu | string is match('^[0-9]+$') and vm_cpu | int > 0
+          - vm_ram_gib | string is match('^[0-9]+$') and vm_ram_gib | int > 0
+          - vm_disk_gib | string is match('^[0-9]+$') and vm_disk_gib | int > 0
+        fail_msg: Required VM inputs are missing or invalid; no VM was created.
+
+    - name: Validate API token inputs
+      ansible.builtin.assert:
+        that:
+          - proxmox_api_token_id is defined and proxmox_api_token_id is match('^[^!]+![^!]+$')
+          - proxmox_api_token_secret is defined and proxmox_api_token_secret | length > 0
+        fail_msg: Configure a Proxmox API token ID and secret in the Semaphore variable group secrets.
+      no_log: true
+
+    - name: Look up requested hostname across the cluster
+      community.proxmox.proxmox_vm_info:
+        name: "{{ vm_hostname }}"
+      register: named_vm
+      no_log: true
+
+    - name: Reject an already used hostname
+      ansible.builtin.assert:
+        that: named_vm.proxmox_vms | length == 0
+        fail_msg: "Hostname {{ vm_hostname }} already exists; no VM was modified. Inspect it before retrying."
+
+    - name: Look up source template and its current configuration
+      community.proxmox.proxmox_vm_info:
+        vmid: "{{ vm_template_id }}"
+        type: qemu
+        config: current
+      register: source_vm
+      no_log: true
+
+    - name: Require a cloud-init-ready template on the selected node
+      ansible.builtin.assert:
+        that:
+          - source_vm.proxmox_vms | length == 1
+          - source_vm.proxmox_vms[0].node == proxmox_node
+          - source_vm.proxmox_vms[0].template | bool
+          - source_vm.proxmox_vms[0].config.scsi0 is defined
+          - source_vm.proxmox_vms[0].config.scsi1 is defined
+          - "'cloudinit' in source_vm.proxmox_vms[0].config.scsi1"
+        fail_msg: "Template {{ vm_template_id }} must be a QEMU template on {{ proxmox_node }} with scsi0 and a scsi1 cloud-init drive; no VM was created."
+
+    - name: Clone full VM onto requested storage
+      community.proxmox.proxmox_kvm:
+        clone: source-template
+        vmid: "{{ vm_template_id }}"
+        name: "{{ vm_hostname }}"
+        node: "{{ proxmox_node }}"
+        storage: "{{ vm_storage }}"
+        full: true
+        state: present
+      register: cloned_vm
+      no_log: true
+
+    - name: Stop if cloning did not allocate a new VMID
+      ansible.builtin.assert:
+        that:
+          - cloned_vm.changed
+          - cloned_vm.vmid is defined
+          - cloned_vm.vmid | string is match('^[0-9]+$')
+          - cloned_vm.vmid | int >= 100
+          - cloned_vm.vmid | int != vm_template_id | int
+        fail_msg: >-
+          Clone did not return a valid new VMID (possibly allocated concurrently);
+          no configuration was attempted. Inspect the cluster before retrying.
+
+    - name: Configure VM before first boot
+      community.proxmox.proxmox_kvm:
+        vmid: "{{ cloned_vm.vmid }}"
+        node: "{{ proxmox_node }}"
+        update: true
+        update_unsafe: true # Needed to replace net0 on this newly cloned VM.
+        cores: "{{ vm_cpu }}"
+        memory: "{{ vm_ram_gib | int * 1024 }}"
+        net:
+          net0: "virtio,bridge={{ vm_vlan }}"
+        ipconfig:
+          ipconfig0: "{{ vm_ipconfig0 }}"
+        ciuser: "{{ vm_user }}"
+        sshkeys: "{{ vm_ssh_public_key }}"
+        state: present
+      no_log: true
+
+    - name: Grow cloned scsi0 disk to requested size
+      community.proxmox.proxmox_disk:
+        vmid: "{{ cloned_vm.vmid }}"
+        disk: scsi0
+        size: "{{ vm_disk_gib }}G"
+        state: resized
+      no_log: true
+
+    - name: Start configured VM
+      community.proxmox.proxmox_kvm:
+        vmid: "{{ cloned_vm.vmid }}"
+        state: started
+      no_log: true
+
+    - name: Report submitted VMID
+      ansible.builtin.debug:
+        msg: "VMID {{ cloned_vm.vmid }} start requested; cloud-init completion is not checked."
