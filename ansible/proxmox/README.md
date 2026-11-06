@@ -1,14 +1,14 @@
 # Semaphore single Proxmox VM
 
-`ansible/provision_vm.yml` clones one existing cloud-init-ready QEMU template, configures CPU, RAM, network, cloud-init user/key and disk while stopped, then starts it. This is one-shot provisioning, not reconciliation; no Terraform state, SSH, guest readiness check, or automatic deletion.
+`ansible/proxmox/provision_vm.yml` clones one existing cloud-init-ready QEMU template, configures CPU, RAM, network, cloud-init user/key and disk while stopped, then starts it. This is one-shot provisioning, not reconciliation; no Terraform state, SSH, guest readiness check, or automatic deletion.
 
 ## Runner and fixed configuration
 
-Create an Ansible task template in Semaphore pointing to `ansible/provision_vm.yml` and a localhost inventory (`localhost ansible_connection=local`). The runner needs API reachability and a supported Python environment. Install Ansible Core, Python dependencies and the pinned real collection in that environment:
+Create an Ansible task template in Semaphore pointing to `ansible/proxmox/provision_vm.yml` and a localhost inventory (`localhost ansible_connection=local`). The runner needs API reachability and a supported Python environment. Install Ansible Core, Python dependencies and the pinned real collection in that environment:
 
 ```sh
-python3 -m pip install ansible-core -r ansible/proxmox/semaphore_vm/requirements.txt
-ansible-galaxy collection install -r ansible/proxmox/semaphore_vm/requirements.yml
+python3 -m pip install ansible-core -r ansible/proxmox/requirements.txt
+ansible-galaxy collection install -r ansible/proxmox/requirements.yml
 ```
 
 Assign a Semaphore Variable Group to the template. Put `proxmox_api_token_id` (full `user@realm!token` identifier) and `proxmox_api_token_secret` in the group's **Secrets** tab. The playbook splits the full token identifier into the module's `api_user=user@realm` and `api_token_id=token`. Do not expose these as survey inputs or commit them. Restrict token permissions and template launch access. API tasks use `no_log`; avoid verbose secret logging. TLS verification is enabled; trust the Proxmox CA in the runner. Never disable TLS verification.
@@ -51,7 +51,7 @@ Non-secret example survey JSON:
 For manual invocation, store fixed and survey non-secret variables in local JSON files outside this public repository and token variables in an encrypted Ansible Vault file outside it. Do not place credentials on the command line:
 
 ```sh
-ansible-playbook -i localhost, -c local ansible/provision_vm.yml \
+ansible-playbook -i localhost, -c local ansible/proxmox/provision_vm.yml \
   -e @/path/to/fixed-config.json -e @/path/to/survey.json \
   -e @/path/to/encrypted-token.yml --ask-vault-pass
 ```

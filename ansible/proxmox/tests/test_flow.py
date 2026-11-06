@@ -9,7 +9,7 @@ from proxmoxer.backends.https import ProxmoxHTTPApiTokenAuth
 from requests import Request
 
 ROOT = Path(__file__).resolve().parents[1]
-PLAYBOOK = ROOT.parents[1] / "provision_vm.yml"
+PLAYBOOK = ROOT / "provision_vm.yml"
 COLLECTION = "community/proxmox/plugins/modules"
 MOCK = '''#!/usr/bin/python
 import json
