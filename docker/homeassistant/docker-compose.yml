@@ -1,6 +1,6 @@
 services:
   homeassistant:
-    image: homeassistant/home-assistant:2026.9
+    image: homeassistant/home-assistant:2026.10
     container_name: homeassistant_core
     hostname: homeassistant_core
     volumes:
