@@ -82,7 +82,7 @@
             qm create {{ template_vmid }}
             --memory {{ template_memory }}
             --core {{ template_cores }}
-            --net0 virtio,bridge=vmbr0
+            --net0 virtio,bridge=vlan66
             --scsihw virtio-scsi-pci
             --bios ovmf
             --machine q35
