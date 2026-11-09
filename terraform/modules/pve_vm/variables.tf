@@ -31,7 +31,8 @@ variable "vm_user_sshkeys" {
   type        = list(string)
   default     = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID62LmYRu1rDUha3timAIcA39LtcIOny1iAgFLnxoBxm vez@bastion",
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHovfHKpqTvwj5zrcSuSZALa8iiH6qBvE5dyJCz9eQ2k vez@surface"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHovfHKpqTvwj5zrcSuSZALa8iiH6qBvE5dyJCz9eQ2k vez@surface",
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG9bx04oxnZTmMm/7U9lUlhZM64xIMUSx48JiwxUH86x semaphore"
   ]
 }
 
