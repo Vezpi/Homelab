@@ -98,9 +98,6 @@
         - name: Set boot order to the primary disk
           ansible.builtin.command: qm set {{ template_vmid }} --boot order=scsi0
  
-        - name: Add serial console for cloud-init consoles
-          ansible.builtin.command: qm set {{ template_vmid }} --serial0 socket --vga serial0
- 
         - name: Convert the VM to a template
           ansible.builtin.command: qm template {{ template_vmid }}
 
