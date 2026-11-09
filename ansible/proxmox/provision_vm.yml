@@ -1,0 +1,175 @@
+---
+- name: Clone and start one cloud-init VM
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    vm_cpu: 1
+    vm_ram_gib: 2
+    vm_disk_gib: 4
+    vm_vlan: vlan66
+    vm_ipconfig0: ip=dhcp
+    vm_dns_domains:
+      vlan66: lab.vezpi.com
+  module_defaults:
+    group/community.proxmox.proxmox:
+      api_host: "{{ proxmox_api_host }}"
+      api_port: "{{ proxmox_api_port | default(8006) }}"
+      api_user: "{{ proxmox_api_token_id.split('!')[0] }}"
+      api_token_id: "{{ proxmox_api_token_id.split('!')[1] }}"
+      api_token_secret: "{{ proxmox_api_token_secret }}"
+      validate_certs: true
+  tasks:
+    - name: Validate hostname and DNS mapping before using the API
+      ansible.builtin.assert:
+        that:
+          - vm_hostname is defined and vm_hostname is match('^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$')
+          - vm_vlan in vm_dns_domains
+        fail_msg: A short hostname and a known VLAN/DNS suffix are required; no VM was created.
+
+    - name: Look up requested hostname across the cluster
+      community.proxmox.proxmox_vm_info:
+        name: "{{ vm_hostname }}"
+      register: named_vm
+      no_log: true
+
+    - name: Reject an already used hostname
+      ansible.builtin.assert:
+        that: named_vm.proxmox_vms | length == 0
+        fail_msg: "Hostname {{ vm_hostname }} already exists; no VM was modified. Inspect it before retrying."
+
+    - name: Look up source template and its current configuration
+      community.proxmox.proxmox_vm_info:
+        vmid: "{{ vm_template_id }}"
+        type: qemu
+        config: current
+      register: source_vm
+      no_log: true
+
+    - name: Require a cloud-init-ready template on its current node
+      ansible.builtin.assert:
+        that:
+          - source_vm.proxmox_vms | length == 1
+          - source_vm.proxmox_vms[0].node is defined
+          - source_vm.proxmox_vms[0].template | bool
+          - source_vm.proxmox_vms[0].config.scsi0 is defined
+          - source_vm.proxmox_vms[0].config.scsi1 is defined
+          - "'cloudinit' in source_vm.proxmox_vms[0].config.scsi1"
+        fail_msg: "Template {{ vm_template_id }} must resolve uniquely to a QEMU template with a node, scsi0 and a scsi1 cloud-init drive; no VM was created."
+
+    - name: Clone template into a new VM
+      community.proxmox.proxmox_kvm:
+        clone: source-template
+        vmid: "{{ vm_template_id }}"
+        name: "{{ vm_hostname }}"
+        node: "{{ source_vm.proxmox_vms[0].node }}"
+        storage: "{{ vm_storage }}"
+        full: true
+        state: present
+      register: cloned_vm
+      no_log: true
+
+    - name: Stop if cloning did not allocate a new VMID
+      ansible.builtin.assert:
+        that:
+          - cloned_vm.changed
+          - cloned_vm.vmid is defined
+          - cloned_vm.vmid | int != vm_template_id | int
+        fail_msg: >-
+          Clone did not return a valid new VMID (possibly allocated concurrently);
+          no configuration was attempted. Inspect the cluster before retrying.
+
+    - name: Configure VM before first boot
+      community.proxmox.proxmox_kvm:
+        vmid: "{{ cloned_vm.vmid }}"
+        node: "{{ source_vm.proxmox_vms[0].node }}"
+        update: true
+        update_unsafe: true # Needed to replace net0 on this newly cloned VM.
+        cores: "{{ vm_cpu }}"
+        memory: "{{ vm_ram_gib | int * 1024 }}"
+        net:
+          net0: "virtio,bridge={{ vm_vlan }}"
+        ipconfig:
+          ipconfig0: "{{ vm_ipconfig0 }}"
+        ciuser: "{{ vm_user }}"
+        sshkeys: "{{ vm_ssh_public_key }}"
+        state: present
+      no_log: true
+
+    - name: Resize VM disk to requested size
+      community.proxmox.proxmox_disk:
+        vmid: "{{ cloned_vm.vmid }}"
+        disk: scsi0
+        size: "{{ vm_disk_gib }}G"
+        state: resized
+      no_log: true
+
+    - name: Start VM
+      community.proxmox.proxmox_kvm:
+        vmid: "{{ cloned_vm.vmid }}"
+        state: started
+      no_log: true
+
+    - name: Wait for guest DNS publication
+      ansible.builtin.command: getent ahosts "{{ vm_hostname }}.{{ vm_dns_domains[vm_vlan] }}"
+      register: guest_dns
+      changed_when: false
+      until: guest_dns.rc == 0 and guest_dns.stdout | length > 0
+      retries: 30
+      delay: 5
+
+    - name: Wait for guest SSH port
+      ansible.builtin.wait_for:
+        host: "{{ vm_hostname }}.{{ vm_dns_domains[vm_vlan] }}"
+        port: 22
+        connect_timeout: 5
+        timeout: 180
+        sleep: 5
+
+    - name: Add VM to dynamic inventory
+      ansible.builtin.add_host:
+        name: "{{ vm_hostname }}.{{ vm_dns_domains[vm_vlan] }}"
+        groups: provisioned_vm
+        ansible_connection: ssh
+        ansible_user: "{{ vm_user }}"
+        ansible_ssh_timeout: 10
+        provisioned_vmid: "{{ cloned_vm.vmid }}"
+
+- name: Verify cloud-init and Ansible on the new guest
+  hosts: provisioned_vm
+  gather_facts: false
+  vars:
+    vm_timezone: Europe/Paris
+  tasks:
+    - name: Wait for guest to be available
+      ansible.builtin.wait_for_connection:
+        connect_timeout: 10
+        sleep: 5
+        timeout: 180
+
+    - name: Wait for cloud-init status
+      ansible.builtin.command: timeout 300 cloud-init status --wait --long
+      register: cloudinit_wait
+      changed_when: false
+      failed_when: false
+    
+    - name: Warn about degraded cloud-init completion
+      ansible.builtin.debug:
+        msg: "VMID {{ provisioned_vmid }} cloud-init completed with degraded status (rc 2); individual cloud-init operations may not have succeeded. Inspect the diagnostics before relying on this guest."
+      when: cloudinit_wait.rc == 2
+
+    - name: Assert cloud-init completion
+      ansible.builtin.assert:
+        that:
+          - cloudinit_wait.rc in [0, 2]
+          - "cloudinit_wait.stdout is search('(?m)^status: done\\s*$')"
+        fail_msg: "VMID {{ provisioned_vmid }} cloud-init status is not complete (rc {{ cloudinit_wait.rc }}); VM left intact for inspection."
+
+    - name: Set guest timezone
+      ansible.builtin.command: timedatectl set-timezone "{{ vm_timezone }}"
+      become: true
+
+    - name: Report verified guest readiness
+      ansible.builtin.debug:
+        msg: "VMID {{ provisioned_vmid }} at {{ inventory_hostname }} completed cloud-init."

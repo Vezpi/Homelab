@@ -1,0 +1,19 @@
+# Provision one Proxmox VM with Semaphore
+
+Create an Ansible task template for `ansible/proxmox/provision_vm.yml` with a localhost inventory (`localhost ansible_connection=local`). It discovers the template's current node via the cluster API, clones once, configures before starting, then checks the guest by FQDN.
+
+The Semaphore server gets `proxmoxer>=2.3,<3` and `requests>=2.31,<3` from `docker/semaphore/requirements.txt` (mounted from `/appli/docker/semaphore/requirements.txt` to `/etc/semaphore/requirements.txt`); the image installs these on container startup, not merely on mount. Semaphore automatically installs the adjacent `ansible/proxmox/requirements.yml` (`community.proxmox:2.0.0`) unless **Skip Galaxy install** is enabled.
+
+In a Semaphore Variable Group, set fixed `proxmox_api_host` (hostname, not URL), `vm_template_id`, `vm_storage`, `vm_user`, and `vm_ssh_public_key` (public keys only). One key works as before; multiple keys are newline-delimited, one complete public key per line (for example, `ssh-ed25519 <public-key-A>` followed by `ssh-ed25519 <public-key-B>` on the next line). Include the public key corresponding to the guest SSH credential selected for Semaphore. Set `proxmox_api_token_id` (full `user@realm!token`) and `proxmox_api_token_secret` in the group's **Secrets** tab, not the survey. Optional fixed values: `proxmox_api_port` (default 8006) and `vm_ipconfig0` (default `ip=dhcp`). Trust the Proxmox CA in the runner; TLS verification stays enabled.
+
+| Survey variable | Default |
+| --- | --- |
+| `vm_hostname` | Required; unique name |
+| `vm_cpu` | `1` core |
+| `vm_ram_gib` | `2` GiB |
+| `vm_disk_gib` | `4` GiB, absolute disk size |
+| `vm_vlan` | `vlan66` bridge/VNet name |
+
+Only `vlan66` maps to `lab.vezpi.com` in the playbook; unknown VLANs fail before API provisioning. `vm_hostname` must be a single short DNS label (no dots). DHCP/DNS must publish `<hostname>.lab.vezpi.com` for the chosen VNet; a derived name is not proof of a current record. Stale/reused DNS can point at another host: verify record ownership and the new guest's SSH host key out of band before running. Never trust an unverified `ssh-keyscan` result or disable host-key checking.
+
+Use a template with bootable `scsi0`, a `scsi1` cloud-init drive, Python 3, `cloud-init`, `timeout`, SSH and a reachable guest network. Select an SSH Key Store **user credential on the task inventory** whose private key matches one authorized public key for `vm_user`; the same Ansible invocation's inventory credential must be available to the dynamically added guest (verify this in the installed Semaphore version). The localhost API token is separate. Pre-enroll a verified guest host key in the runner's trusted `known_hosts` using a Captain-approved mechanism; no private key path or trust bypass is configured here. DNS, SSH port, Python-capable Ansible connection, cloud-init wait/status and final Ansible ping are bounded stages. The connection check retries transient transport failures within its timeout; Python 3 is required in the image. Completed cloud-init status accepts rc 0 or degraded rc 2, prints `--long` diagnostics and warns on rc 2; other codes, incomplete status and timeouts fail. A failed or timed-out VM remains for Captain to inspect, not delete. After accepted cloud-init completion, the guest timezone is read and, if needed, set to `Europe/Paris` (CET/CEST); RTC and NTP are untouched. The guest needs `timedatectl`, timezone data (`tzdata`), and authorized noninteractive sudo/become for `vm_user` when a timezone change is needed. If these are unavailable, readiness fails; no sudo configuration, package installation or reboot is added.
