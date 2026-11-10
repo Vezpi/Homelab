@@ -1,19 +1,45 @@
 # Provision one Proxmox VM with Semaphore
 
-Create an Ansible task template for `ansible/proxmox/provision_vm.yml` with a localhost inventory (`localhost ansible_connection=local`). It discovers the template's current node via the cluster API, clones once, configures before starting, then checks the guest by FQDN.
+Run `ansible/proxmox/provision_vm.yml` as a Semaphore Ansible task with inventory `localhost ansible_connection=local`. It clones one cloud-init template, configures the new VM before boot, then connects to the guest by FQDN.
 
-The Semaphore server gets `proxmoxer>=2.3,<3` and `requests>=2.31,<3` from `docker/semaphore/requirements.txt` (mounted from `/appli/docker/semaphore/requirements.txt` to `/etc/semaphore/requirements.txt`); the image installs these on container startup, not merely on mount. Semaphore automatically installs the adjacent `ansible/proxmox/requirements.yml` (`community.proxmox:2.0.0`) unless **Skip Galaxy install** is enabled.
+## Prerequisites
 
-In a Semaphore Variable Group, set fixed `proxmox_api_host` (hostname, not URL), `vm_template_id`, `vm_storage`, `vm_user`, and `vm_ssh_public_key` (public keys only). One key works as before; multiple keys are newline-delimited, one complete public key per line (for example, `ssh-ed25519 <public-key-A>` followed by `ssh-ed25519 <public-key-B>` on the next line). Include the public key corresponding to the guest SSH credential selected for Semaphore. Set `proxmox_api_token_id` (full `user@realm!token`) and `proxmox_api_token_secret` in the group's **Secrets** tab, not the survey. Optional fixed values: `proxmox_api_port` (default 8006) and `vm_ipconfig0` (default `ip=dhcp`). Trust the Proxmox CA in the runner; TLS verification stays enabled.
+- The template needs a bootable `scsi0`, a `scsi1` cloud-init drive, Python 3, `cloud-init`, `timeout`, SSH and network access. It does not need the QEMU guest agent enabled.
+- The guest needs `timedatectl`, `tzdata`, apt access and noninteractive sudo for `vm_user` to set its timezone and install/start the agent.
+- The Semaphore runner must trust the Proxmox CA and have a verified guest SSH host key in `known_hosts`. Do not disable TLS or SSH host-key verification. Confirm the DNS record belongs to the new VM before connecting; a stale record could point to another host.
+- Select an SSH Key Store **user credential on the task inventory** matching an authorized public key for `vm_user`. Check that the same invocation makes this credential available to the dynamically added guest in your installed Semaphore version. The Proxmox API token is separate.
+- The Semaphore image installs `proxmoxer>=2.3,<3` and `requests>=2.31,<3` from `docker/semaphore/requirements.txt` on startup (mounted at `/etc/semaphore/requirements.txt`). Semaphore installs `ansible/proxmox/requirements.yml` (`community.proxmox:2.0.0`) unless **Skip Galaxy install** is enabled.
 
-| Survey variable | Default |
+## Semaphore variables
+
+Put these fixed values in a Variable Group:
+
+| Variable | Value |
 | --- | --- |
-| `vm_hostname` | Required; unique name |
+| `proxmox_api_host` | Hostname, not a URL |
+| `vm_template_id`, `vm_storage`, `vm_user` | Template, destination storage and guest user |
+| `vm_ssh_public_key` | One or more complete public keys, separated by newlines; include the key matching the selected SSH credential |
+| `proxmox_api_port` | Optional; defaults to `8006` |
+| `vm_ipconfig0` | Optional; defaults to `ip=dhcp` |
+
+Put `proxmox_api_token_id` (full `user@realm!token`) and `proxmox_api_token_secret` in the Variable Group's **Secrets** tab, not the survey.
+
+Survey inputs:
+
+| Variable | Default |
+| --- | --- |
+| `vm_hostname` | Required unique short DNS label (no dots) |
 | `vm_cpu` | `1` core |
 | `vm_ram_gib` | `2` GiB |
 | `vm_disk_gib` | `4` GiB, absolute disk size |
 | `vm_vlan` | `vlan66` bridge/VNet name |
 
-Only `vlan66` maps to `lab.vezpi.com` in the playbook; unknown VLANs fail before API provisioning. `vm_hostname` must be a single short DNS label (no dots). DHCP/DNS must publish `<hostname>.lab.vezpi.com` for the chosen VNet; a derived name is not proof of a current record. Stale/reused DNS can point at another host: verify record ownership and the new guest's SSH host key out of band before running. Never trust an unverified `ssh-keyscan` result or disable host-key checking.
+Only `vlan66` maps to a DNS suffix (`lab.vezpi.com`); other VLANs fail before cloning. DHCP/DNS must publish `<hostname>.lab.vezpi.com` for that VNet.
 
-Use a template with bootable `scsi0`, a `scsi1` cloud-init drive, Python 3, `cloud-init`, `timeout`, SSH and a reachable guest network; the template need not have the agent enabled. Select an SSH Key Store **user credential on the task inventory** whose private key matches one authorized public key for `vm_user`; the same Ansible invocation's inventory credential must be available to the dynamically added guest (verify this in the installed Semaphore version). The localhost API token is separate. Pre-enroll a verified guest host key in the runner's trusted `known_hosts` using a Captain-approved mechanism; no private key path or trust bypass is configured here. The clone enables its virtio guest-agent channel before first start. DNS, SSH port, Ansible connection and cloud-init wait/status are bounded stages; the connection check retries transient transport failures within its timeout. Completed cloud-init status accepts rc 0 or degraded rc 2 and warns on rc 2; other codes, incomplete status and timeouts fail. After accepted cloud-init completion, the guest sets its timezone to `Europe/Paris` (CET/CEST); RTC and NTP are untouched. The guest needs `timedatectl`, timezone data (`tzdata`), apt access and authorized noninteractive sudo/become for `vm_user`. It installs `qemu-guest-agent` with apt and starts the package's device-activated service (no manual enablement of its static unit). Any failure leaves the new VM intact for inspection; no sudo configuration or reboot is added. Playbook success does not verify Proxmox agent communication: on the new VM's actual node, Captain checks `qm agent <NEW_VMID> ping` (successful exit with no error; an empty response is valid).
+## What happens
+
+1. The playbook rejects an invalid or existing hostname, then finds the template's current node and clones it. It enables the clone's virtio guest-agent channel before first boot, regardless of template configuration.
+2. It waits for DNS, port 22, an Ansible connection and cloud-init. Cloud-init exit code `0` is accepted; degraded exit code `2` is accepted with a warning. Other codes, incomplete status and timeouts fail.
+3. On the guest it sets the display timezone to `Europe/Paris` (CET/CEST), installs `qemu-guest-agent` and starts its device-activated service. It does not change RTC/NTP, manually enable the static unit, configure sudo or reboot.
+
+A failure leaves the new VM intact for inspection. Playbook success does **not** prove agent communication: on the VM's actual Proxmox node, run `qm agent <NEW_VMID> ping`. A successful exit with no error is sufficient, even if the response is empty.
