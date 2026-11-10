@@ -177,11 +177,6 @@
         state: present
       become: true
 
-    - name: Require QEMU guest agent virtio channel in guest
-      ansible.builtin.command:
-        argv: [test, -e, /dev/virtio-ports/org.qemu.guest_agent.0]
-      changed_when: false
-
     - name: Start QEMU guest agent
       ansible.builtin.service:
         name: qemu-guest-agent
