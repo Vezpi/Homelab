@@ -94,6 +94,7 @@
           ipconfig0: "{{ vm_ipconfig0 }}"
         ciuser: "{{ vm_user }}"
         sshkeys: "{{ vm_ssh_public_key }}"
+        agent: "enabled=1,type=virtio"
         state: present
       no_log: true
 
@@ -168,6 +169,23 @@
 
     - name: Set guest timezone
       ansible.builtin.command: timedatectl set-timezone "{{ vm_timezone }}"
+      become: true
+
+    - name: Install QEMU guest agent
+      ansible.builtin.apt:
+        name: qemu-guest-agent
+        state: present
+      become: true
+
+    - name: Require QEMU guest agent virtio channel in guest
+      ansible.builtin.command:
+        argv: [test, -e, /dev/virtio-ports/org.qemu.guest_agent.0]
+      changed_when: false
+
+    - name: Start QEMU guest agent
+      ansible.builtin.service:
+        name: qemu-guest-agent
+        state: started
       become: true
 
     - name: Report verified guest readiness
