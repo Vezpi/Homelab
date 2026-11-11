@@ -154,10 +154,12 @@
       register: cloudinit_wait
       changed_when: false
       failed_when: false
-    
-    - name: Warn about degraded cloud-init completion
+      
+    - name: Show cloud-init wait diagnostics
       ansible.builtin.debug:
-        msg: "VMID {{ provisioned_vmid }} cloud-init completed with degraded status (rc 2); individual cloud-init operations may not have succeeded. Inspect the diagnostics before relying on this guest."
+        msg:
+          - "stdout: {{ cloudinit_wait.stdout | trim }}"
+          - "stderr: {{ cloudinit_wait.stderr | trim }}"
       when: cloudinit_wait.rc == 2
 
     - name: Assert cloud-init completion
