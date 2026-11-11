@@ -117,8 +117,8 @@
       register: guest_dns
       changed_when: false
       until: guest_dns.rc == 0 and guest_dns.stdout | length > 0
-      retries: 30
-      delay: 5
+      retries: 20
+      delay: 15
 
     - name: Wait for guest SSH port
       ansible.builtin.wait_for:
