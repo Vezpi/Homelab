@@ -6,6 +6,7 @@
   vars:
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
     vm_cpu: 1
+    vm_cpu_model: x86-64-v2-AES
     vm_ram_gib: 2
     vm_disk_gib: 4
     vm_vlan: vlan66
@@ -87,6 +88,7 @@
         update: true
         update_unsafe: true # Needed to replace net0 on this newly cloned VM.
         cores: "{{ vm_cpu }}"
+        cpu: "{{ vm_cpu_model }}"
         memory: "{{ vm_ram_gib | int * 1024 }}"
         net:
           net0: "virtio,bridge={{ vm_vlan }}"

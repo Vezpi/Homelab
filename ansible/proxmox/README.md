@@ -42,4 +42,6 @@ Only `vlan66` maps to a DNS suffix (`lab.vezpi.com`); other VLANs fail before cl
 2. It waits for DNS, port 22, an Ansible connection and cloud-init. Cloud-init exit code `0` is accepted; degraded exit code `2` is accepted with a warning. Other codes, incomplete status and timeouts fail.
 3. On the guest it sets the display timezone to `Europe/Paris` (CET/CEST), installs `qemu-guest-agent` and starts its device-activated service. It does not change RTC/NTP, manually enable the static unit, configure sudo or reboot.
 
+New clones use `vm_cpu_model` (default `x86-64-v2-AES`, overridable via extra vars) before first boot; every destination host must support the selected model. Existing VMs and templates are unchanged.
+
 A failure leaves the new VM intact for inspection. Playbook success does **not** prove agent communication: on the VM's actual Proxmox node, run `qm agent <NEW_VMID> ping`. A successful exit with no error is sufficient, even if the response is empty.
